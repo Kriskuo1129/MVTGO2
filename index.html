@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="系排GO MVTGO2 正式賽前先發名單安排"
+    />
+    <title>系排GO MVTGO2</title>
+    <link rel="stylesheet" href="./src/styles/main.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="home-view" class="home" aria-labelledby="page-title">
+        <div class="hero">
+          <p class="eyebrow">MVTGO2</p>
+          <h1 id="page-title">系排GO MVTGO2</h1>
+          <p class="hero__description">從正式賽前流程建立本場比賽的先發名單。</p>
+          <button id="test-player-button" class="primary-button" type="button">
+            取得測試球員資料
+          </button>
+        </div>
+      </section>
+
+      <section id="lineup-view" class="lineup-view" aria-labelledby="lineup-title" hidden>
+        <header class="match-header">
+          <p class="eyebrow">STARTING LINEUP</p>
+          <h1 id="lineup-title" tabindex="-1">本場比賽</h1>
+          <div class="match-header__line" aria-hidden="true"></div>
+          <p class="match-opponent">
+            <span id="home-team-name">HOME</span>
+            <span aria-hidden="true">VS</span>
+            <span id="away-team-name">AWAY</span>
+          </p>
+        </header>
+
+        <section class="lineup-board" aria-labelledby="lineup-team-title">
+          <div class="lineup-board__heading">
+            <div>
+              <p class="eyebrow">HOME TEAM</p>
+              <h2 id="lineup-team-title">HOME</h2>
+            </div>
+            <span id="selection-progress" class="progress">已安排 0 / 6</span>
+          </div>
+
+          <div id="lineup-slots" class="lineup-slots"></div>
+
+          <footer class="lineup-actions">
+            <p id="lineup-status" class="status" role="status" aria-live="polite">
+              請完成六個職位的安排。
+            </p>
+            <button id="confirm-lineup-button" class="confirm-button" type="button" disabled>
+              確認
+            </button>
+          </footer>
+        </section>
+      </section>
+
+      <section id="confirmed-view" class="confirmed-view" aria-labelledby="confirmed-title" hidden>
+        <div class="confirmation-card">
+          <p class="eyebrow">LINEUP CONFIRMED</p>
+          <h1 id="confirmed-title" tabindex="-1">HOME 先發已確認</h1>
+          <p>已產生正式先發配置資料，可供後續正式比賽流程使用。</p>
+          <dl id="confirmed-lineup" class="confirmed-lineup"></dl>
+          <button id="edit-lineup-button" class="secondary-button" type="button">返回調整名單</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="player-selector-dialog" class="player-dialog" aria-labelledby="player-dialog-title">
+      <div class="player-dialog__header">
+        <div>
+          <p class="eyebrow">SELECT PLAYER</p>
+          <h2 id="player-dialog-title">選擇球員</h2>
+        </div>
+        <button id="close-player-dialog" class="dialog-close" type="button" aria-label="關閉選人視窗">×</button>
+      </div>
+      <p id="player-dialog-description" class="player-dialog__description"></p>
+      <div id="player-options" class="player-options"></div>
+      <div class="player-dialog__footer">
+        <button id="clear-slot-button" class="secondary-button" type="button">清除此槽位</button>
+        <button id="cancel-player-dialog" class="secondary-button" type="button">取消</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+# 作業系統與編輯器暫存檔
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 本機環境與記錄檔
+.env
+.env.*
+!.env.example
+*.log
+
+# 未來若導入套件或建置流程時使用
+node_modules/
+dist/
+coverage/
