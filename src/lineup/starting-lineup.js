@@ -19,6 +19,20 @@ export function isPlayerOutOfPosition(player, lineupPosition) {
   return player.position !== SLOT_PLAYER_POSITIONS[lineupPosition];
 }
 
+export function sortPlayersForLineupPosition(players, lineupPosition) {
+  if (!Array.isArray(players)) {
+    throw new TypeError("球員名單必須是陣列。");
+  }
+  if (!LINEUP_POSITIONS.includes(lineupPosition)) {
+    throw new RangeError(`未知的先發職位：${lineupPosition}`);
+  }
+  const preferredPosition = SLOT_PLAYER_POSITIONS[lineupPosition];
+  return [
+    ...players.filter((player) => player.position === preferredPosition),
+    ...players.filter((player) => player.position !== preferredPosition),
+  ];
+}
+
 export function createLineup() {
   return Object.fromEntries(LINEUP_POSITIONS.map((position) => [position, null]));
 }

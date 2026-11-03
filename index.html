@@ -29,27 +29,15 @@
           <h1 id="lineup-title" tabindex="-1">本場比賽</h1>
           <div class="match-header__line" aria-hidden="true"></div>
           <p class="match-opponent">
-            <span id="home-team-name">HOME</span>
             <span aria-hidden="true">VS</span>
-            <span id="away-team-name">AWAY</span>
+            <span id="opponent-team-name">對手球隊</span>
           </p>
         </header>
 
-        <section class="lineup-board" aria-labelledby="lineup-team-title">
-          <div class="lineup-board__heading">
-            <div>
-              <p class="eyebrow">HOME TEAM</p>
-              <h2 id="lineup-team-title">HOME</h2>
-            </div>
-            <span id="selection-progress" class="progress">已安排 0 / 6</span>
-          </div>
-
+        <section class="lineup-board" aria-label="先發名單">
           <div id="lineup-slots" class="lineup-slots"></div>
 
           <footer class="lineup-actions">
-            <p id="lineup-status" class="status" role="status" aria-live="polite">
-              請完成六個職位的安排。
-            </p>
             <button id="confirm-lineup-button" class="confirm-button" type="button" disabled>
               確認
             </button>
@@ -60,7 +48,7 @@
       <section id="confirmed-view" class="confirmed-view" aria-labelledby="confirmed-title" hidden>
         <div class="confirmation-card">
           <p class="eyebrow">LINEUP CONFIRMED</p>
-          <h1 id="confirmed-title" tabindex="-1">HOME 先發已確認</h1>
+          <h1 id="confirmed-title" tabindex="-1">先發已確認</h1>
           <p>已產生正式先發配置資料，可供後續正式比賽流程使用。</p>
           <dl id="confirmed-lineup" class="confirmed-lineup"></dl>
           <button id="edit-lineup-button" class="secondary-button" type="button">返回調整名單</button>

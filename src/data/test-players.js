@@ -61,12 +61,12 @@ export function createTestMatchPlayers() {
   return Object.freeze({ home, away });
 }
 
-export function createTestMatchData() {
+export function createTestMatchData({ awayTeamName = "虎科資工" } = {}) {
   const players = createTestMatchPlayers();
   return Object.freeze({
     matchName: "大資盃 冠軍賽",
     homeTeamName: "MVTGO HOME",
-    awayTeamName: "MVTGO AWAY",
+    awayTeamName,
     homePlayers: players.home,
     awayPlayers: players.away,
   });

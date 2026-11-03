@@ -10,6 +10,7 @@ import {
   LINEUP_DISPLAY_ORDER,
   LINEUP_POSITIONS,
   setLineupPlayer,
+  sortPlayersForLineupPosition,
 } from "./lineup/starting-lineup.js";
 
 const views = {
@@ -20,12 +21,8 @@ const views = {
 const elements = {
   testPlayerButton: document.querySelector("#test-player-button"),
   lineupTitle: document.querySelector("#lineup-title"),
-  homeTeamName: document.querySelector("#home-team-name"),
-  awayTeamName: document.querySelector("#away-team-name"),
-  lineupTeamTitle: document.querySelector("#lineup-team-title"),
+  opponentTeamName: document.querySelector("#opponent-team-name"),
   lineupSlots: document.querySelector("#lineup-slots"),
-  selectionProgress: document.querySelector("#selection-progress"),
-  lineupStatus: document.querySelector("#lineup-status"),
   confirmLineupButton: document.querySelector("#confirm-lineup-button"),
   confirmedLineup: document.querySelector("#confirmed-lineup"),
   editLineupButton: document.querySelector("#edit-lineup-button"),
@@ -90,10 +87,14 @@ function renderLineupSlots() {
     button.setAttribute("aria-label", `${lineupPosition}：${player ? player.name : "選擇球員"}`);
     button.append(createAvatar(player, "lineup-slot__avatar"));
 
-    const name = document.createElement("p");
-    name.className = "lineup-slot__name";
-    name.textContent = player ? `${player.name} · ${player.position}` : "尚未選擇";
-    slot.append(title, button, name);
+    slot.append(title, button);
+
+    if (player) {
+      const name = document.createElement("p");
+      name.className = "lineup-slot__name";
+      name.textContent = `${player.name} · ${player.position}`;
+      slot.append(name);
+    }
 
     if (player && isPlayerOutOfPosition(player, lineupPosition)) {
       slot.classList.add("lineup-slot--mismatch");
@@ -122,7 +123,11 @@ function createAbilityItem(label, value) {
 function renderPlayerOptions() {
   const selectedPlayerIds = getSelectedPlayerIds(homeLineup);
   const currentPlayerId = homeLineup[activeLineupPosition];
-  const options = matchData.homePlayers.map((player) => {
+  const orderedPlayers = sortPlayersForLineupPosition(
+    matchData.homePlayers,
+    activeLineupPosition,
+  );
+  const options = orderedPlayers.map((player) => {
     const usedElsewhere = selectedPlayerIds.has(player.id) && player.id !== currentPlayerId;
     const button = document.createElement("button");
     button.type = "button";
@@ -180,13 +185,8 @@ function openPlayerDialog(lineupPosition) {
 
 function renderLineupState() {
   renderLineupSlots();
-  const selectedCount = getSelectedPlayerIds(homeLineup).size;
   const complete = isLineupComplete(homeLineup);
-  elements.selectionProgress.textContent = `已安排 ${selectedCount} / 6`;
   elements.confirmLineupButton.disabled = !complete;
-  elements.lineupStatus.textContent = complete
-    ? "六個職位已安排完成，可以確認先發。"
-    : `尚有 ${LINEUP_POSITIONS.length - selectedCount} 個職位未安排。`;
 }
 
 function renderConfirmedLineup(startingLineup) {
@@ -216,9 +216,7 @@ function beginPregameFlow() {
     ),
   };
   elements.lineupTitle.textContent = matchData.matchName;
-  elements.homeTeamName.textContent = matchData.homeTeamName;
-  elements.awayTeamName.textContent = matchData.awayTeamName;
-  elements.lineupTeamTitle.textContent = matchData.homeTeamName;
+  elements.opponentTeamName.textContent = matchData.awayTeamName;
   renderLineupState();
   showView("lineup");
   elements.lineupTitle.focus({ preventScroll: true });
@@ -250,7 +248,7 @@ elements.confirmLineupButton.addEventListener("click", () => {
     showView("confirmed");
     document.querySelector("#confirmed-title").focus({ preventScroll: true });
   } catch (error) {
-    elements.lineupStatus.textContent = error.message;
+    console.error(error);
   }
 });
 elements.editLineupButton.addEventListener("click", () => {
