@@ -1,6 +1,8 @@
 import { APP_CONFIG } from "./config/app.config.js";
+import { renderCourtView } from "./court/court-view.js";
 import { createTestMatchData } from "./data/test-players.js";
 import { getAbilityTierClass, getPlayerMoodName } from "./display/player-display.js";
+import { createMatch, createMatchId } from "./match/create-match.js";
 import {
   createLineup,
   createStartingLineup,
@@ -16,7 +18,7 @@ import {
 const views = {
   home: document.querySelector("#home-view"),
   lineup: document.querySelector("#lineup-view"),
-  confirmed: document.querySelector("#confirmed-view"),
+  court: document.querySelector("#court-view"),
 };
 const elements = {
   testPlayerButton: document.querySelector("#test-player-button"),
@@ -24,8 +26,7 @@ const elements = {
   opponentTeamName: document.querySelector("#opponent-team-name"),
   lineupSlots: document.querySelector("#lineup-slots"),
   confirmLineupButton: document.querySelector("#confirm-lineup-button"),
-  confirmedLineup: document.querySelector("#confirmed-lineup"),
-  editLineupButton: document.querySelector("#edit-lineup-button"),
+  courtView: document.querySelector("#court-view"),
   playerDialog: document.querySelector("#player-selector-dialog"),
   playerDialogTitle: document.querySelector("#player-dialog-title"),
   playerDialogDescription: document.querySelector("#player-dialog-description"),
@@ -39,6 +40,8 @@ let matchData = null;
 let homeLineup = createLineup();
 let pregameStartingLineups = null;
 let activeLineupPosition = null;
+let currentMatch = null;
+let courtController = null;
 
 document.title = APP_CONFIG.title;
 
@@ -189,20 +192,9 @@ function renderLineupState() {
   elements.confirmLineupButton.disabled = !complete;
 }
 
-function renderConfirmedLineup(startingLineup) {
-  const playersById = new Map(matchData.homePlayers.map((player) => [player.id, player]));
-  const fragments = LINEUP_POSITIONS.flatMap((position) => {
-    const term = document.createElement("dt");
-    const description = document.createElement("dd");
-    const player = playersById.get(startingLineup.assignments[position]);
-    term.textContent = position;
-    description.textContent = `${player.name}（${player.id}）`;
-    return [term, description];
-  });
-  elements.confirmedLineup.replaceChildren(...fragments);
-}
-
 function beginPregameFlow() {
+  courtController?.destroy();
+  courtController = null;
   matchData = createTestMatchData();
   homeLineup = createLineup();
   pregameStartingLineups = {
@@ -215,6 +207,7 @@ function beginPregameFlow() {
       "AWAY",
     ),
   };
+  currentMatch = null;
   elements.lineupTitle.textContent = matchData.matchName;
   elements.opponentTeamName.textContent = matchData.awayTeamName;
   renderLineupState();
@@ -244,14 +237,23 @@ elements.cancelPlayerDialog.addEventListener("click", () => elements.playerDialo
 elements.confirmLineupButton.addEventListener("click", () => {
   try {
     pregameStartingLineups.home = createStartingLineup(homeLineup, matchData.homePlayers);
-    renderConfirmedLineup(pregameStartingLineups.home);
-    showView("confirmed");
-    document.querySelector("#confirmed-title").focus({ preventScroll: true });
+    currentMatch = createMatch({
+      id: createMatchId(),
+      name: matchData.matchName,
+      homeTeamName: matchData.homeTeamName,
+      awayTeamName: matchData.awayTeamName,
+      courtId: matchData.courtId,
+      homePlayers: matchData.homePlayers,
+      awayPlayers: matchData.awayPlayers,
+      homeStartingLineup: pregameStartingLineups.home,
+      awayStartingLineup: pregameStartingLineups.away,
+    });
+    const developmentMode = typeof window !== "undefined"
+      && new URLSearchParams(window.location.search).has("dev");
+    courtController = renderCourtView(currentMatch, elements.courtView, { developmentMode });
+    showView("court");
+    document.querySelector("#court-match-name").focus({ preventScroll: true });
   } catch (error) {
     console.error(error);
   }
-});
-elements.editLineupButton.addEventListener("click", () => {
-  showView("lineup");
-  renderLineupState();
 });

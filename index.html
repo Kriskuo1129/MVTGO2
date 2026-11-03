@@ -45,14 +45,48 @@
         </section>
       </section>
 
-      <section id="confirmed-view" class="confirmed-view" aria-labelledby="confirmed-title" hidden>
-        <div class="confirmation-card">
-          <p class="eyebrow">LINEUP CONFIRMED</p>
-          <h1 id="confirmed-title" tabindex="-1">先發已確認</h1>
-          <p>已產生正式先發配置資料，可供後續正式比賽流程使用。</p>
-          <dl id="confirmed-lineup" class="confirmed-lineup"></dl>
-          <button id="edit-lineup-button" class="secondary-button" type="button">返回調整名單</button>
+      <section id="court-view" class="court-view" aria-labelledby="court-match-name" hidden>
+        <header class="court-header">
+          <p class="eyebrow">MATCH</p>
+          <h1 id="court-match-name" tabindex="-1">本場比賽</h1>
+          <div class="court-scoreboard" aria-label="目前比分">
+            <span id="court-home-team-name">我方球隊</span>
+            <strong>
+              <span id="court-home-score">0</span>
+              <span aria-hidden="true">：</span>
+              <span id="court-away-score">0</span>
+            </strong>
+            <span id="court-away-team-name">對手球隊</span>
+          </div>
+        </header>
+
+        <div id="court-viewport" class="court-viewport" aria-label="比賽視窗">
+          <div id="court-world" class="court-world"></div>
         </div>
+
+        <section class="match-controls" aria-label="玩家操作區">
+          <div class="match-control-block">
+            <h2>基本戰術</h2>
+            <button type="button" disabled>尚未實作</button>
+          </div>
+          <div class="match-control-block">
+            <h2>特殊戰術</h2>
+            <div class="special-tactic-slots">
+              <button type="button" disabled>空</button>
+              <button type="button" disabled>空</button>
+              <button type="button" disabled>空</button>
+              <button type="button" disabled>空</button>
+            </div>
+          </div>
+          <button class="timeout-button" type="button" disabled>暫停（尚未實作）</button>
+        </section>
+
+        <section id="court-dev-tools" class="court-dev-tools" aria-label="開發座標工具" hidden>
+          <p id="court-coordinate-output">點擊球場取得世界座標</p>
+          <button id="copy-court-coordinate" type="button" disabled>複製座標</button>
+          <label for="dev-ball-x">測試排球 X</label>
+          <input id="dev-ball-x" type="range" min="0" max="2280" step="1" value="1140" />
+        </section>
       </section>
     </main>
 
