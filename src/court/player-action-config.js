@@ -1,4 +1,5 @@
 import { BALL_FLIGHT_CONFIG } from "./ball-trajectory.js";
+import { PLAYER_MOVE_SPEED } from "../config/match-params.js";
 import {
   calculateJumpHeightAtTime,
   calculatePlayerContactPoint,
@@ -20,7 +21,7 @@ export const PLAYER_ACTION_TYPES = Object.freeze(Object.values(PLAYER_ACTIONS));
 // Phase 2B 動畫節奏與形變集中於此，後續可依正式畫面測試統一調整。
 export const PLAYER_ACTION_CONFIG = Object.freeze({
   move: Object.freeze({
-    worldSpeed: 560,
+    worldSpeed: PLAYER_MOVE_SPEED,
     stretchX: 0.82,
     stretchY: 1.2,
   }),

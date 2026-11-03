@@ -60,6 +60,25 @@ MVTGO_NEW/
       └─ main.css
 ```
 
+## 正式比賽參數調整
+
+正式共用速度集中於 `src/config/match-params.js`，直接修改常數右側的數值，儲存後重新載入頁面即可；一般模式與 `?dev` 使用同一份參數，不需修改公式或函數。
+
+以下參數單位皆為「世界像素／秒」：
+
+| 參數 | 預設值 | 接線狀態 |
+| --- | --- | --- |
+| `BALL_SPEED_DEFAULT` | 1450 | 已接線：未指定速度的一般球路 |
+| `SERVE_SPEED_NORMAL` | 1550 | 已接線：正式 SERVE |
+| `JUMP_SERVE_SPEED` | 1750 | 已接線：正式 JUMP_SERVE |
+| `PLAYER_MOVE_SPEED` | 560 | 已接線：正式 MOVE |
+| `SERVE_SPEED_SLOW` | 1300 | 尚未接線：預留 |
+| `SERVE_SPEED_FAST` | 1750 | 尚未接線：預留 |
+| `SERVE_SPEED_MAX` | 2000 | 尚未接線：預留 |
+| `PLAYER_RECEIVE_MOVE_SPEED` | 560 | 尚未接線：預留 |
+
+上層明確指定球路 `speed` 時優先使用該速度，指定 `duration`（毫秒）時優先使用該飛行時間。既有球路最短 80 毫秒、MOVE 最短 120 毫秒的限制維持不變。預留參數目前不影響比賽，沒有速度等級抽選規則。
+
 ## 啟動方式
 
 本專案無外部依賴與建置步驟。雙擊專案根目錄的 `啟動測試網站.bat`，即可使用 Windows 內建 PowerShell 啟動僅限本機連線的靜態網站，並自動開啟 `http://localhost:8080/`。停止時在命令視窗按 `Ctrl+C`。

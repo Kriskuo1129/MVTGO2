@@ -1,7 +1,13 @@
+import {
+  BALL_SPEED_DEFAULT,
+  SERVE_SPEED_NORMAL,
+  JUMP_SERVE_SPEED,
+} from "../config/match-params.js";
+
 export const BALL_FLIGHT_CONFIG = Object.freeze({
-  defaultSpeed: 1450,
-  serveSpeed: 1550,
-  jumpServeSpeed: 1750,
+  defaultSpeed: BALL_SPEED_DEFAULT,
+  serveSpeed: SERVE_SPEED_NORMAL,
+  jumpServeSpeed: JUMP_SERVE_SPEED,
   minimumDuration: 80,
 });
 
