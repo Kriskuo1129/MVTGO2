@@ -899,13 +899,50 @@ tbody tr:hover {
   transform: translate(-50%, -50%);
 }
 
+.court-player__motion {
+  display: block;
+  transform: translateY(0);
+  will-change: transform;
+}
+
 .court-world .court-player__avatar {
+  position: relative;
   width: 72px;
   height: 72px;
+  overflow: hidden;
   color: #ffffff;
   background: #151515;
   border: 3px solid #ffffff;
+  border-radius: 50%;
   font-size: 22px;
+  line-height: 1;
+  transform: rotate(0deg) scale(1);
+  transform-origin: center;
+  will-change: transform;
+}
+
+.court-player__avatar img,
+.court-player__avatar-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.court-player__avatar img {
+  object-fit: cover;
+}
+
+.court-player__avatar img[hidden] {
+  display: none;
+}
+
+.court-player__avatar-fallback {
+  display: grid;
+  place-items: center;
+}
+
+.court-player__avatar-fallback[hidden] {
+  display: none;
 }
 
 .court-world .court-player[data-team="AWAY"] .court-player__avatar {
@@ -1000,6 +1037,64 @@ tbody tr:hover {
   width: 100%;
 }
 
+.court-dev-animation {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem;
+  border: 1px dashed var(--color-gold);
+}
+
+.court-dev-animation[hidden] {
+  display: none;
+}
+
+.court-dev-animation h2 {
+  margin: 0;
+  color: var(--color-gold-bright);
+  font-size: 0.85rem;
+}
+
+.court-dev-animation__selectors,
+.court-dev-animation__move,
+.court-dev-animation__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.court-dev-animation__move[hidden] {
+  display: none;
+}
+
+.court-dev-animation label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.court-dev-animation input,
+.court-dev-animation select {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0;
+}
+
+.court-dev-animation__actions {
+  margin-top: 0.05rem;
+}
+
+.court-dev-animation__actions button:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-gold);
+}
+
 @media (max-width: 24rem) {
   .court-viewport {
     height: clamp(17rem, 52vh, 24rem);
@@ -1007,5 +1102,9 @@ tbody tr:hover {
 
   .match-control-block {
     grid-template-columns: 1fr;
+  }
+
+  .court-dev-animation {
+    padding: 0.55rem;
   }
 }

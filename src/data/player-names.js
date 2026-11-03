@@ -1,5 +1,5 @@
 // 正式遊戲共用姓名參數，可直接新增、刪除或調整項目。
-export const PLAYER_SURNAMES = [
+export const PLAYER_TAIWAN_SURNAMES = [
   "郭",
   "陳",
   "林",
@@ -37,7 +37,64 @@ export const PLAYER_SURNAMES = [
   "梁",
 ];
 
+export const PLAYER_JAPAN_SURNAMES = [
+  "大谷",
+  "山本",
+  "佐藤",
+  "村上",
+  "岡本",
+  "近藤",
+  "宮城",
+  "源田",
+  "周東",
+  "森下",
+  "小園",
+  "鈴木",
+  "菊池",
+  "伊藤",
+  "高橋",
+  "吉田",
+];
+
+// 台灣姓氏維持主要比例，日本姓氏作為少量彩蛋；總和必須為 1。
+export const PLAYER_SURNAME_WEIGHTS = Object.freeze({
+  taiwan: 0.85,
+  japan: 0.15,
+});
+
+// 保留既有完整姓氏池匯出，供正式資料檢查與其他系統共用。
+export const PLAYER_SURNAMES = [
+  ...PLAYER_TAIWAN_SURNAMES,
+  ...PLAYER_JAPAN_SURNAMES,
+];
+
 export const PLAYER_GIVEN_NAMES = [
+  "傑憲",
+  "育成",
+  "天信",
+  "峻岳",
+  "政華",
+  "念庭",
+  "國宸",
+  "培峰",
+  "凱威",
+  "基宏",
+  "翔平",
+  "由伸",
+  "輝明",
+  "宗隆",
+  "和真",
+  "健介",
+  "大彌",
+  "壯亮",
+  "佑京",
+  "翔太",
+  "海斗",
+  "誠也",
+  "秀悟",
+  "正尚",
+  "宏斗",
+  "雄星",
   "冠宇",
   "瑞茂",
   "坤宇",

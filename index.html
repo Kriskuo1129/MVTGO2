@@ -60,6 +60,34 @@
           </div>
         </header>
 
+        <section id="court-dev-animation" class="court-dev-animation" aria-label="正式球員動作測試" hidden>
+          <h2>正式球員動作測試</h2>
+          <div class="court-dev-animation__selectors">
+            <label>
+              <span>場上球員</span>
+              <select id="dev-player-id"></select>
+            </label>
+            <label>
+              <span>動作</span>
+              <select id="dev-player-action"></select>
+            </label>
+          </div>
+          <div id="dev-move-fields" class="court-dev-animation__move" hidden>
+            <label>
+              <span>MOVE X</span>
+              <input id="dev-move-x" type="number" min="0" max="2280" step="1" />
+            </label>
+            <label>
+              <span>MOVE Y</span>
+              <input id="dev-move-y" type="number" min="0" max="900" step="1" />
+            </label>
+          </div>
+          <div class="court-dev-animation__actions">
+            <button id="dev-run-action" type="button">執行動作</button>
+            <button id="dev-reset-actions" type="button">重設待機與位置</button>
+          </div>
+        </section>
+
         <div id="court-viewport" class="court-viewport" aria-label="比賽視窗">
           <div id="court-world" class="court-world"></div>
         </div>
@@ -86,6 +114,7 @@
           <button id="copy-court-coordinate" type="button" disabled>複製座標</button>
           <label for="dev-ball-x">測試排球 X</label>
           <input id="dev-ball-x" type="range" min="0" max="2280" step="1" value="1140" />
+          <p id="dev-ball-state">排球 X: 1140，Y: 450，高度: 0</p>
         </section>
       </section>
     </main>

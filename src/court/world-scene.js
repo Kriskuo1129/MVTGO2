@@ -51,6 +51,7 @@ export function createInitialWorldScene(homeStartingLineup, awayStartingLineup) 
       id: "BALL",
       x: INITIAL_BALL_POSITION.x,
       y: INITIAL_BALL_POSITION.y,
+      height: 0,
     },
   };
 }
