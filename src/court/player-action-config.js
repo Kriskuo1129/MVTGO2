@@ -71,12 +71,11 @@ export const DEVELOPMENT_SERVE_CONFIG = Object.freeze({
   targetMarginX: 130,
 });
 
-export function createServeTrajectory({
+export function createServePreparation({
   action,
   teamId,
   playerX,
   playerY,
-  target,
 }) {
   const isJumpServe = action === PLAYER_ACTIONS.JUMP_SERVE;
   if (!isJumpServe && action !== PLAYER_ACTIONS.SERVE) {
@@ -84,9 +83,6 @@ export function createServeTrajectory({
   }
   if (teamId !== "HOME" && teamId !== "AWAY") {
     throw new RangeError(`未知的球隊識別：${teamId}`);
-  }
-  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.height)) {
-    throw new TypeError("正式發球目標必須包含有效 x、y、height。");
   }
   const config = isJumpServe
     ? SERVE_TRAJECTORY_CONFIG.jumpServe
@@ -117,8 +113,23 @@ export function createServeTrajectory({
       height: contact.height + config.tossHeight,
     }),
     contact: Object.freeze({ x: contact.x, y: contact.y, height: contact.height }),
-    target: Object.freeze({ x: target.x, y: target.y, height: target.height }),
     speed: config.flightSpeed,
+  });
+}
+
+export function createServeTrajectory({
+  action,
+  teamId,
+  playerX,
+  playerY,
+  target,
+}) {
+  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.height)) {
+    throw new TypeError("正式發球目標必須包含有效 x、y、height。");
+  }
+  return Object.freeze({
+    ...createServePreparation({ action, teamId, playerX, playerY }),
+    target: Object.freeze({ x: target.x, y: target.y, height: target.height }),
   });
 }
 

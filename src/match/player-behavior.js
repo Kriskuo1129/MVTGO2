@@ -1,79 +1,99 @@
 import { PLAYER_ACTIONS } from "../court/player-action-config.js";
-import { SERVICE_ERROR_TYPES, SERVE_OUTCOMES } from "./match-resolver.js";
+import { SERVE_OUTCOMES } from "./match-resolver.js";
+import { getPlayerTargetPosition, POSITION_PHASES } from "./positioning.js";
 
-// 目前正式輪轉資料只有 R1；此集中對應是 Phase 3A 的最小發球員規則。
-// 未來定義完整六輪站位時，只需擴充此表，不需修改 Engine 或動畫模組。
-export const SERVING_SLOT_BY_ROTATION = Object.freeze({
-  R1: "S",
+export const PLAYER_BEHAVIORS = Object.freeze({
+  MOVE_TO_POSITION: "MOVE_TO_POSITION",
+  HOLD_POSITION: "HOLD_POSITION",
+  SERVE: "SERVE",
+  IDLE: "IDLE",
 });
 
-// Phase 3A 正式事件球路目標設定；使用世界比例，不放入 Engine 或 Resolver。
-// OUT 目標位於場地圖片邊緣的有效球場外，NET 目標位於中央球網附近。
+// 正式結果已由 Engine 確認；此設定只決定 ACE 的視覺落點。
 export const SERVE_ROUTE_CONFIG = Object.freeze({
   ace: Object.freeze({ homeX: 0.72, awayX: 0.28, y: 0.58, height: 0 }),
-  out: Object.freeze({ homeX: 0.97, awayX: 0.03, y: 0.12, height: 0 }),
-  net: Object.freeze({ homeX: 0.51, awayX: 0.49, y: 0.5, height: 20 }),
 });
 
-export function getServingPlayer(match) {
-  const servingTeam = match?.runtime?.servingTeam;
-  const rotation = match?.rotations?.[servingTeam];
-  const lineupPosition = SERVING_SLOT_BY_ROTATION[rotation];
-  if (!lineupPosition) {
-    throw new Error(`目前輪轉 ${rotation} 尚未定義正式發球員槽位。`);
-  }
-  const team = match.teams[servingTeam];
-  const playerId = team.startingLineup.assignments[lineupPosition];
-  const player = team.players.find((candidate) => candidate.id === playerId);
-  if (!player) throw new Error(`${servingTeam} 發球員 ${playerId} 不在正式名單中。`);
-  return Object.freeze({ servingTeam, rotation, lineupPosition, player });
-}
-
-function getServeTarget(match, servingTeam, result) {
-  const { width, height } = match.scene;
-  const homeServing = servingTeam === "HOME";
-  if (result.outcome === SERVE_OUTCOMES.ACE) {
-    const target = SERVE_ROUTE_CONFIG.ace;
-    return Object.freeze({
-      x: width * (homeServing ? target.homeX : target.awayX),
-      y: height * target.y,
-      height: target.height,
+function createPresentationState(match, preparedEvent) {
+  const teams = {};
+  for (const teamId of ["HOME", "AWAY"]) {
+    teams[teamId] = Object.freeze({
+      onCourtPlayers: Object.freeze(match.scene.players[teamId].map((worldPlayer) => {
+        const player = match.teams[teamId].players
+          .find((candidate) => candidate.id === worldPlayer.playerId);
+        return Object.freeze({
+          playerId: worldPlayer.playerId,
+          lineupPosition: worldPlayer.lineupPosition,
+          x: worldPlayer.x,
+          y: worldPlayer.y,
+          serveType: player?.serveType,
+        });
+      })),
     });
   }
-  if (result.errorType === SERVICE_ERROR_TYPES.NET) {
-    const target = SERVE_ROUTE_CONFIG.net;
-    return Object.freeze({
-      x: width * (homeServing ? target.homeX : target.awayX),
-      y: height * target.y,
-      height: target.height,
-    });
-  }
-  const target = SERVE_ROUTE_CONFIG.out;
   return Object.freeze({
-    x: width * (homeServing ? target.homeX : target.awayX),
-    y: height * target.y,
-    height: target.height,
+    phase: POSITION_PHASES.SERVE_PREPARE,
+    servingTeam: preparedEvent.teamId,
+    rotations: match.rotations,
+    teams: Object.freeze(teams),
+    rally: Object.freeze({ servingLineupPosition: preparedEvent.lineupPosition }),
   });
 }
 
-export function createServeBehavior(match, serveEvent) {
-  const { player, servingTeam, lineupPosition } = serveEvent.server;
-  const action = player.serveType === "跳發"
-    ? PLAYER_ACTIONS.JUMP_SERVE
-    : PLAYER_ACTIONS.SERVE;
+function getAceVisualTarget(match, servingTeam) {
+  const config = SERVE_ROUTE_CONFIG.ace;
   return Object.freeze({
-    eventType: "SERVE",
-    commands: Object.freeze([
-      Object.freeze({
-        playerId: player.id,
-        teamId: servingTeam,
-        lineupPosition,
-        action,
-        ballTrajectory: Object.freeze({
-          kind: "SERVE_RESULT",
-          target: getServeTarget(match, servingTeam, serveEvent.result),
-        }),
-      }),
-    ]),
+    x: match.scene.width * (servingTeam === "HOME" ? config.homeX : config.awayX),
+    y: match.scene.height * config.y,
+    height: config.height,
+  });
+}
+
+export function createRallyPreparationCommands(match, preparedEvent) {
+  if (preparedEvent?.type !== "RALLY_PREPARED") {
+    throw new TypeError("站位表現需要 RALLY_PREPARED 正式事件。");
+  }
+  const presentationState = createPresentationState(match, preparedEvent);
+  const commands = [];
+  for (const teamId of ["HOME", "AWAY"]) {
+    for (const worldPlayer of match.scene.players[teamId]) {
+      const target = getPlayerTargetPosition({
+        matchState: presentationState,
+        playerId: worldPlayer.playerId,
+        teamId,
+        lineupPosition: worldPlayer.lineupPosition,
+      });
+      const needsMove = Math.hypot(worldPlayer.x - target.x, worldPlayer.y - target.y) > 0.01;
+      commands.push(Object.freeze({
+        playerId: worldPlayer.playerId,
+        teamId,
+        lineupPosition: worldPlayer.lineupPosition,
+        behavior: needsMove ? PLAYER_BEHAVIORS.MOVE_TO_POSITION : PLAYER_BEHAVIORS.HOLD_POSITION,
+        target,
+      }));
+    }
+  }
+  return Object.freeze(commands);
+}
+
+export function createServePresentationCommand(match, serveEvent) {
+  if (serveEvent?.type !== "SERVE_RESOLVED") {
+    throw new TypeError("發球表現需要 SERVE_RESOLVED 正式事件。");
+  }
+  if (serveEvent.result?.outcome !== SERVE_OUTCOMES.ACE) {
+    throw new Error(`尚未支援 ${serveEvent.result?.outcome} 的發球表現。`);
+  }
+  const player = match.teams[serveEvent.teamId].players
+    .find((candidate) => candidate.id === serveEvent.playerId);
+  if (!player) throw new Error(`發球表現找不到正式球員 ${serveEvent.playerId}。`);
+  return Object.freeze({
+    playerId: player.id,
+    teamId: serveEvent.teamId,
+    behavior: PLAYER_BEHAVIORS.SERVE,
+    action: player.serveType === "跳發" ? PLAYER_ACTIONS.JUMP_SERVE : PLAYER_ACTIONS.SERVE,
+    ballTrajectory: Object.freeze({
+      kind: "SERVE_RESULT",
+      target: getAceVisualTarget(match, serveEvent.teamId),
+    }),
   });
 }

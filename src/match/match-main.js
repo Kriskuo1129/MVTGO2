@@ -36,10 +36,7 @@ function enterCourt(matchInput, homeStartingLineup, testMode, onCourtReady) {
   });
   const developmentMode = new URLSearchParams(window.location.search).has("dev");
   courtController = renderCourtView(currentMatch, views.court, { developmentMode });
-  currentEngine = new MatchEngine({
-    match: currentMatch,
-    animationPort: courtController,
-  });
+  currentEngine = new MatchEngine({ match: currentMatch });
   activeLineupUi?.destroy();
   activeLineupUi = null;
   showView("court");

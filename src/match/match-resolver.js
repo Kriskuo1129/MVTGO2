@@ -12,6 +12,7 @@ export const SERVICE_ERROR_TYPES = Object.freeze({
 export const TEMPORARY_SERVE_RESOLUTION = Object.freeze({
   baseAceWeight: 30,
   abilityAceWeight: 0.75,
+  moodAceWeight: 2,
   baseErrorWeight: 48,
   abilityErrorReduction: 0.38,
   serveTypeAceBonus: Object.freeze({ 一般: 0, 跳飄: 7, 跳發: 14 }),
@@ -20,13 +21,22 @@ export const TEMPORARY_SERVE_RESOLUTION = Object.freeze({
   netErrorRatio: 0.42,
 });
 
+function getTacticalServeModifier(servingTactics) {
+  if (servingTactics === null || servingTactics === undefined) return 0;
+  const modifier = servingTactics.serveModifier;
+  if (!Number.isFinite(modifier)) {
+    throw new TypeError("正式發球戰術的 serveModifier 必須是有限數值。");
+  }
+  return modifier;
+}
+
 function assertRandomValue(value) {
   if (!Number.isFinite(value) || value < 0 || value >= 1) {
     throw new RangeError("Resolver 亂數來源必須回傳 0（含）到 1（不含）的數值。");
   }
 }
 
-export function resolveServe({ server, random }) {
+export function resolveServe({ server, servingTactics = null, random }) {
   if (!server?.abilities || !Number.isInteger(server.abilities.serve)) {
     throw new TypeError("發球判定需要具有正式發球能力的球員資料。");
   }
@@ -34,11 +44,15 @@ export function resolveServe({ server, random }) {
     throw new TypeError("發球判定需要可測試的亂數來源。");
   }
   const config = TEMPORARY_SERVE_RESOLUTION;
+  const moodModifier = (server.mood - 3) * config.moodAceWeight;
+  const tacticalModifier = getTacticalServeModifier(servingTactics);
   const aceWeight = Math.max(
     config.minimumWeight,
     config.baseAceWeight
       + server.abilities.serve * config.abilityAceWeight
-      + config.serveTypeAceBonus[server.serveType],
+      + config.serveTypeAceBonus[server.serveType]
+      + moodModifier
+      + tacticalModifier,
   );
   const errorWeight = Math.max(
     config.minimumWeight,
@@ -55,7 +69,13 @@ export function resolveServe({ server, random }) {
       outcome: SERVE_OUTCOMES.ACE,
       errorType: null,
       source: "RESOLVER",
-      resolution: Object.freeze({ aceWeight, errorWeight, aceProbability }),
+      resolution: Object.freeze({
+        aceWeight,
+        errorWeight,
+        aceProbability,
+        moodModifier,
+        tacticalModifier,
+      }),
     });
   }
 
@@ -68,6 +88,12 @@ export function resolveServe({ server, random }) {
       ? SERVICE_ERROR_TYPES.NET
       : SERVICE_ERROR_TYPES.OUT,
     source: "RESOLVER",
-    resolution: Object.freeze({ aceWeight, errorWeight, aceProbability }),
+    resolution: Object.freeze({
+      aceWeight,
+      errorWeight,
+      aceProbability,
+      moodModifier,
+      tacticalModifier,
+    }),
   });
 }

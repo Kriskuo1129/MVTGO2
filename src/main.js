@@ -14,9 +14,10 @@ matchTestButton.addEventListener("click", () => {
   // 範圍：只指定 testMode；先發、Match、球場與未來即時系統均沿用正式流程。
   beginPregameFlow(createTestPregameMatchInput(), {
     testMode: true,
-    onCourtReady: ({ match, engine }) => setupServeResultTestControls({
+    onCourtReady: ({ match, engine, courtController }) => setupServeResultTestControls({
       match,
       engine,
+      courtController,
       root: document.querySelector("#court-view"),
     }),
   });

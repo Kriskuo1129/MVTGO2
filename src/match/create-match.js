@@ -1,6 +1,4 @@
 import { LINEUP_POSITIONS } from "../lineup/starting-lineup.js";
-import { getCourtConfig } from "../court/court-config.js";
-import { createInitialWorldScene } from "../court/world-scene.js";
 import { createInitialMatchState } from "./match-state.js";
 
 function assertText(value, fieldName) {
@@ -51,7 +49,7 @@ export function createMatch({
   assertText(name, "比賽名稱");
   assertText(homeTeamName, "HOME 球隊名稱");
   assertText(awayTeamName, "AWAY 球隊名稱");
-  getCourtConfig(courtId);
+  assertText(courtId, "場地 ID");
   if (!Array.isArray(homePlayers) || !Array.isArray(awayPlayers)) {
     throw new TypeError("HOME／AWAY 球員名單必須是陣列。");
   }
@@ -67,11 +65,10 @@ export function createMatch({
   }
 
   const initialState = createInitialMatchState();
-  const scene = createInitialWorldScene(homeStartingLineup, awayStartingLineup);
   return Object.freeze({
     id: id.trim(),
     name: name.trim(),
-    courtId,
+    courtId: courtId.trim(),
     environment: Object.freeze({ testMode }),
     teams: Object.freeze({
       HOME: Object.freeze({
@@ -85,7 +82,6 @@ export function createMatch({
         startingLineup: awayStartingLineup,
       }),
     }),
-    scene,
     ...initialState,
   });
 }

@@ -147,13 +147,22 @@ export class PlayerActionController {
     }
 
     let serveTrajectory = null;
+    let servePreparation = null;
     if (action === PLAYER_ACTIONS.SERVE || action === PLAYER_ACTIONS.JUMP_SERVE) {
       this.#assertBallAvailable(playerId);
-      serveTrajectory = this.#validateServeTrajectory(
-        this.#getPlayer(playerId),
-        action,
-        options.serveTrajectory,
-      );
+      if (options.servePreparation && typeof options.onContact === "function") {
+        servePreparation = this.#validateServePreparation(
+          this.#getPlayer(playerId),
+          action,
+          options.servePreparation,
+        );
+      } else {
+        serveTrajectory = this.#validateServeTrajectory(
+          this.#getPlayer(playerId),
+          action,
+          options.serveTrajectory,
+        );
+      }
     }
 
     const state = this.#beginAction(playerId, action);
@@ -161,8 +170,10 @@ export class PlayerActionController {
     if (action === PLAYER_ACTIONS.SET) return this.#set(state);
     if (action === PLAYER_ACTIONS.ATTACK) return this.#attack(state);
     if (action === PLAYER_ACTIONS.BLOCK) return this.#block(state);
-    if (action === PLAYER_ACTIONS.SERVE) return this.#serve(state, false, serveTrajectory);
-    return this.#serve(state, true, serveTrajectory);
+    if (action === PLAYER_ACTIONS.SERVE) {
+      return this.#serve(state, false, serveTrajectory ?? servePreparation, options.onContact);
+    }
+    return this.#serve(state, true, serveTrajectory ?? servePreparation, options.onContact);
   }
 
   playAndWait(playerId, action, options = {}) {
@@ -388,11 +399,9 @@ export class PlayerActionController {
     ]);
   }
 
-  #serve(state, isJumpServe, serveTrajectory) {
+  #serve(state, isJumpServe, serveTrajectory, onContact = null) {
     const config = isJumpServe ? PLAYER_ACTION_CONFIG.jumpServe : PLAYER_ACTION_CONFIG.serve;
     const trajectory = serveTrajectory;
-    const hitTime = config.tossRiseDuration + config.tossFallDuration;
-    const totalDuration = hitTime + trajectory.flight.duration;
     this.#setBallWorldPosition(
       trajectory.tossStart.x,
       trajectory.tossStart.y,
@@ -403,14 +412,11 @@ export class PlayerActionController {
       state.playerId,
       [trajectory.tossStart, trajectory.tossApex, trajectory.contact, trajectory.target],
       [config.tossRiseDuration, config.tossFallDuration],
-      trajectory.flight,
+      trajectory.flight ?? null,
       generation,
+      onContact,
+      isJumpServe ? BALL_FLIGHT_CONFIG.jumpServeSpeed : BALL_FLIGHT_CONFIG.serveSpeed,
     );
-
-    const timeline = animateElement(state.marker, [
-      { opacity: 1 },
-      { opacity: 1 },
-    ], { duration: totalDuration });
 
     if (isJumpServe) {
       // 跳發直接重用與 ATTACK 相同的旋轉及跳躍規則。
@@ -423,7 +429,6 @@ export class PlayerActionController {
       );
       return this.#trackAnimations(state, [
         ballPath,
-        timeline,
         animateElement(state.avatarLayer, getAttackFrames(state.teamId), {
           duration: attack.duration,
           delay: config.attackStartTime,
@@ -435,7 +440,7 @@ export class PlayerActionController {
       ]);
     }
 
-    return this.#trackAnimations(state, [ballPath, timeline]);
+    return this.#trackAnimations(state, [ballPath]);
   }
 
   #assertBallAvailable(playerId) {
@@ -445,10 +450,37 @@ export class PlayerActionController {
   }
 
   #validateServeTrajectory(state, action, trajectory) {
+    const preparation = this.#validateServePreparation(state, action, trajectory);
+    const { contact, target } = preparation;
+    if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.height)) {
+      throw new TypeError("serveTrajectory.target 必須包含有效 x、y、height。");
+    }
+    if (target.x < 0 || target.x > this.match.scene.width || target.y < 0 || target.y > this.match.scene.height || target.height < 0) {
+      throw new RangeError("serveTrajectory.target 超出正式世界範圍。");
+    }
+    if (state.teamId === "HOME" && target.x <= contact.x) {
+      throw new Error("HOME 發球目標必須位於擊球點右側。");
+    }
+    if (state.teamId === "AWAY" && target.x >= contact.x) {
+      throw new Error("AWAY 發球目標必須位於擊球點左側。");
+    }
+    const defaultSpeed = action === PLAYER_ACTIONS.JUMP_SERVE
+      ? BALL_FLIGHT_CONFIG.jumpServeSpeed
+      : BALL_FLIGHT_CONFIG.serveSpeed;
+    const flight = createBallFlight({
+      start: contact,
+      end: target,
+      speed: trajectory.speed ?? defaultSpeed,
+      duration: trajectory.duration,
+    });
+    return Object.freeze({ ...preparation, target, flight });
+  }
+
+  #validateServePreparation(state, action, trajectory) {
     if (!trajectory || typeof trajectory !== "object") {
       throw new TypeError("正式發球動作必須由 Match Engine 提供 serveTrajectory。開發模式會明確提供測試球路。");
     }
-    const names = ["tossStart", "tossApex", "contact", "target"];
+    const names = ["tossStart", "tossApex", "contact"];
     for (const name of names) {
       const point = trajectory[name];
       if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.height)) {
@@ -458,7 +490,7 @@ export class PlayerActionController {
         throw new RangeError(`serveTrajectory.${name} 超出正式世界範圍。`);
       }
     }
-    const { tossStart, tossApex, contact, target } = trajectory;
+    const { tossStart, tossApex, contact } = trajectory;
     if (
       Math.abs(tossStart.x - tossApex.x) > 0.01
       || Math.abs(tossStart.y - tossApex.y) > 0.01
@@ -494,28 +526,23 @@ export class PlayerActionController {
     if (contactDifference > 0.5) {
       throw new Error("serveTrajectory.contact 必須符合球員正式動作接觸點。");
     }
-    if (state.teamId === "HOME" && target.x <= contact.x) {
-      throw new Error("HOME 發球目標必須位於擊球點右側。");
-    }
-    if (state.teamId === "AWAY" && target.x >= contact.x) {
-      throw new Error("AWAY 發球目標必須位於擊球點左側。");
-    }
-    const defaultSpeed = action === PLAYER_ACTIONS.JUMP_SERVE
-      ? BALL_FLIGHT_CONFIG.jumpServeSpeed
-      : BALL_FLIGHT_CONFIG.serveSpeed;
-    const flight = createBallFlight({
-      start: contact,
-      end: target,
-      speed: trajectory.speed ?? defaultSpeed,
-      duration: trajectory.duration,
-    });
-    return Object.freeze({ ...trajectory, flight });
+    return Object.freeze({ ...trajectory, tossStart, tossApex, contact });
   }
 
-  #animateBallPath(ownerPlayerId, points, tossDurations, flight, ownerGeneration) {
+  #animateBallPath(
+    ownerPlayerId,
+    points,
+    tossDurations,
+    flight,
+    ownerGeneration,
+    onContact = null,
+    deferredFlightSpeed = BALL_FLIGHT_CONFIG.serveSpeed,
+  ) {
     const startedAt = this.now();
     const tossDuration = tossDurations.reduce((sum, duration) => sum + duration, 0);
-    const totalDuration = tossDuration + flight.duration;
+    let activeFlight = flight;
+    let totalDuration = tossDuration + (activeFlight?.duration ?? 0);
+    let contactHandled = false;
     let resolveFinished;
     const finished = new Promise((resolve) => { resolveFinished = resolve; });
     const animation = {
@@ -552,7 +579,24 @@ export class PlayerActionController {
           height: from.height + (to.height - from.height) * eased,
         };
       } else {
-        position = sampleBallFlight(flight, elapsed - tossDuration);
+        if (!contactHandled && onContact) {
+          contactHandled = true;
+          const target = onContact(Object.freeze({ ...points[2] }));
+          if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.height)) {
+            this.#cancelBallAnimation();
+            return;
+          }
+          activeFlight = createBallFlight({
+            start: points[2],
+            end: target,
+            speed: target.speed ?? deferredFlightSpeed,
+            duration: target.duration,
+          });
+          totalDuration = tossDuration + activeFlight.duration;
+        }
+        position = activeFlight
+          ? sampleBallFlight(activeFlight, elapsed - tossDuration)
+          : points[2];
       }
       this.#setBallWorldPosition(position.x, position.y, position.height);
       if (elapsed < totalDuration) {

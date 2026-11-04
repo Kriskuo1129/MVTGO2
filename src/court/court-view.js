@@ -7,6 +7,12 @@ import {
   PLAYER_ACTION_TYPES,
 } from "./player-action-config.js";
 import { PlayerActionController } from "./player-action-controller.js";
+import { createInitialWorldScene } from "./world-scene.js";
+import {
+  createRallyPreparationCommands,
+  createServePresentationCommand,
+  PLAYER_BEHAVIORS,
+} from "../match/player-behavior.js";
 
 export function getCourtPlayers(match, teamId) {
   const team = match?.teams?.[teamId];
@@ -95,6 +101,12 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
   if (!rootElement) {
     throw new TypeError("球場畫面根節點不存在。");
   }
+  const presentationScene = createInitialWorldScene(
+    match.teams.HOME.startingLineup,
+    match.teams.AWAY.startingLineup,
+  );
+  // Court 擁有自己的 Presentation Scene；不回寫正式 Match 核心資料。
+  match = Object.freeze({ ...match, scene: presentationScene });
   const court = getCourtConfig(match.courtId);
   rootElement.querySelector("#court-match-name").textContent = match.name;
   rootElement.querySelector("#court-home-team-name").textContent = match.teams.HOME.name;
@@ -194,20 +206,20 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
     formalBehaviorActive = true;
     try {
       const completions = await Promise.all(commands.map((command) => {
-        const playerState = actionController.getPlayerState(command.playerId);
-        let options = {};
-        if (command.ballTrajectory?.kind === "SERVE_RESULT") {
-          options = {
-            serveTrajectory: createServeTrajectory({
-              action: command.action,
-              teamId: playerState.teamId,
-              playerX: playerState.x,
-              playerY: playerState.y,
-              target: command.ballTrajectory.target,
-            }),
-          };
+        if (command.behavior === PLAYER_BEHAVIORS.MOVE_TO_POSITION) {
+          return actionController.playAndWait(command.playerId, PLAYER_ACTIONS.MOVE, command.target);
         }
-        return actionController.playAndWait(command.playerId, command.action, options);
+        if (
+          command.behavior === PLAYER_BEHAVIORS.HOLD_POSITION
+          || command.behavior === PLAYER_BEHAVIORS.IDLE
+        ) {
+          return Promise.resolve(Object.freeze({
+            playerId: command.playerId,
+            action: command.behavior,
+            status: "COMPLETED",
+          }));
+        }
+        throw new Error(`一般行為播放接口不接受 ${command.behavior}。`);
       }));
       if (completions.some((completion) => completion.status !== "COMPLETED")) {
         throw new Error("正式行為動畫在完成前遭到中斷。");
@@ -216,6 +228,43 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
     } finally {
       formalBehaviorActive = false;
     }
+  }
+
+  async function playServePresentationCommand(command) {
+    if (formalBehaviorActive) throw new Error("正式行為動畫正在執行中。");
+    if (command?.behavior !== PLAYER_BEHAVIORS.SERVE) {
+      throw new TypeError("正式發球表現需要 SERVE 命令。");
+    }
+    const action = command.action;
+    const playerState = actionController.getPlayerState(command.playerId);
+    const serveTrajectory = createServeTrajectory({
+      action,
+      teamId: playerState.teamId,
+      playerX: playerState.x,
+      playerY: playerState.y,
+      target: command.ballTrajectory.target,
+    });
+    formalBehaviorActive = true;
+    try {
+      const completion = await actionController.playAndWait(command.playerId, action, {
+        serveTrajectory,
+      });
+      if (completion.status !== "COMPLETED") {
+        throw new Error("正式發球動畫在完成前遭到中斷。");
+      }
+      return Object.freeze([completion]);
+    } finally {
+      formalBehaviorActive = false;
+    }
+  }
+
+  async function playRecordedRally(events) {
+    if (!Array.isArray(events)) throw new TypeError("球場表現需要正式事件陣列。");
+    const preparedEvent = events.find((event) => event.type === "RALLY_PREPARED");
+    const serveEvent = events.find((event) => event.type === "SERVE_RESOLVED");
+    if (!preparedEvent || !serveEvent) throw new Error("正式事件缺少 Rally 準備或發球結果。");
+    await playBehaviorCommands(createRallyPreparationCommands(match, preparedEvent));
+    await playServePresentationCommand(createServePresentationCommand(match, serveEvent));
   }
 
   const devTools = rootElement.querySelector("#court-dev-tools");
@@ -330,6 +379,7 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
     camera,
     actionController,
     playBehaviorCommands,
+    playRecordedRally,
     updateScoreboard,
     followBall,
     resizeCamera,
