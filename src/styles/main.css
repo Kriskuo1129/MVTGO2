@@ -88,6 +88,21 @@ h1 {
   color: var(--color-muted);
 }
 
+.home-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.home-actions button {
+  width: 100%;
+}
+
+.feature-status {
+  margin: -0.25rem 0 0.5rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
 .primary-button,
 .secondary-button {
   min-height: 2.75rem;
@@ -126,6 +141,13 @@ h1 {
   min-height: 1.5em;
   margin: 1rem 0 0;
   color: var(--color-gold-bright);
+}
+
+.lineup-notice {
+  min-height: 1.5em;
+  margin: 0.75rem 0 0;
+  color: var(--color-gold-bright);
+  font-size: 0.9rem;
 }
 
 .lineup-view {
@@ -1043,6 +1065,50 @@ tbody tr:hover {
   margin-bottom: 0.75rem;
   padding: 0.65rem;
   border: 1px dashed var(--color-gold);
+}
+
+.serve-result-test-controls {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-gold);
+}
+
+.serve-result-test-controls[hidden] {
+  display: none;
+}
+
+.serve-result-test-controls h2,
+.serve-result-test-controls p {
+  margin: 0;
+}
+
+.serve-result-test-controls h2 {
+  color: var(--color-gold-bright);
+  font-size: 0.85rem;
+}
+
+.serve-result-test-controls div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.serve-result-test-controls button {
+  min-height: 2.75rem;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+}
+
+.serve-result-test-controls button:not(:disabled) {
+  border-color: var(--color-gold);
+}
+
+.serve-result-test-controls p {
+  color: var(--color-muted);
+  font-size: 0.75rem;
 }
 
 .court-dev-animation[hidden] {

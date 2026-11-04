@@ -5,19 +5,23 @@ export const MATCH_STATUS = Object.freeze({
 export const INITIAL_ROTATION = "R1";
 
 export function createInitialMatchState() {
-  return Object.freeze({
+  return {
     status: MATCH_STATUS.PRE_MATCH,
     rotations: Object.freeze({
       HOME: INITIAL_ROTATION,
       AWAY: INITIAL_ROTATION,
     }),
-    score: Object.freeze({
+    score: {
       HOME: 0,
       AWAY: 0,
-    }),
+    },
+    runtime: {
+      servingTeam: "HOME",
+      lastEvent: null,
+    },
     tactics: Object.freeze({
       HOME: null,
       AWAY: null,
     }),
-  });
+  };
 }

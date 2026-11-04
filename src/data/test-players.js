@@ -27,6 +27,15 @@ const AWAY_PLAYER_DATA = [
   ["A006", "MB", 71, 90, 44, 65, 69, 3, "一般"],
 ];
 
+const TEST_AWAY_STARTING_LINEUP = Object.freeze({
+  S: "A001",
+  OH1: "A002",
+  MB1: "A003",
+  OP: "A004",
+  OH2: "A005",
+  MB2: "A006",
+});
+
 function createSeededRandom(seed) {
   let state = seed >>> 0;
   return () => {
@@ -64,6 +73,7 @@ export function createTestMatchPlayers() {
 export function createTestMatchData({
   awayTeamName = "虎科資工",
   courtId = "court-01",
+  homeDefaultStartingLineup = null,
 } = {}) {
   const players = createTestMatchPlayers();
   return Object.freeze({
@@ -73,5 +83,7 @@ export function createTestMatchData({
     courtId,
     homePlayers: players.home,
     awayPlayers: players.away,
+    homeDefaultStartingLineup,
+    awayStartingLineup: TEST_AWAY_STARTING_LINEUP,
   });
 }

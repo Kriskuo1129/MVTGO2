@@ -55,38 +55,42 @@ export const PLAYER_ACTION_CONFIG = Object.freeze({
   }),
 });
 
-// 僅供 ?dev 動作驗證產生測試球路；正式比賽落點必須由 Match Engine 傳入。
-export const DEVELOPMENT_SERVE_CONFIG = Object.freeze({
+export const SERVE_TRAJECTORY_CONFIG = Object.freeze({
   serve: Object.freeze({
     tossHeight: 190,
-    targetMarginX: 130,
     flightSpeed: BALL_FLIGHT_CONFIG.serveSpeed,
   }),
   jumpServe: Object.freeze({
     tossHeight: 280,
-    targetMarginX: 130,
     flightSpeed: BALL_FLIGHT_CONFIG.jumpServeSpeed,
   }),
 });
 
-export function createDevelopmentServeTrajectory({
+// 僅供 ?dev 動作驗證產生測試落點；正式比賽目標必須由 Player Behavior 傳入。
+export const DEVELOPMENT_SERVE_CONFIG = Object.freeze({
+  targetMarginX: 130,
+});
+
+export function createServeTrajectory({
   action,
   teamId,
   playerX,
   playerY,
-  worldWidth,
-  worldHeight,
+  target,
 }) {
   const isJumpServe = action === PLAYER_ACTIONS.JUMP_SERVE;
   if (!isJumpServe && action !== PLAYER_ACTIONS.SERVE) {
-    throw new RangeError(`無法建立非發球動作的開發球路：${action}`);
+    throw new RangeError(`無法建立非發球動作的正式球路：${action}`);
   }
   if (teamId !== "HOME" && teamId !== "AWAY") {
     throw new RangeError(`未知的球隊識別：${teamId}`);
   }
+  if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.height)) {
+    throw new TypeError("正式發球目標必須包含有效 x、y、height。");
+  }
   const config = isJumpServe
-    ? DEVELOPMENT_SERVE_CONFIG.jumpServe
-    : DEVELOPMENT_SERVE_CONFIG.serve;
+    ? SERVE_TRAJECTORY_CONFIG.jumpServe
+    : SERVE_TRAJECTORY_CONFIG.serve;
   const actionConfig = isJumpServe
     ? PLAYER_ACTION_CONFIG.jumpServe
     : PLAYER_ACTION_CONFIG.serve;
@@ -113,12 +117,40 @@ export function createDevelopmentServeTrajectory({
       height: contact.height + config.tossHeight,
     }),
     contact: Object.freeze({ x: contact.x, y: contact.y, height: contact.height }),
-    target: Object.freeze({
-      x: teamId === "HOME" ? worldWidth - config.targetMarginX : config.targetMarginX,
-      y: Math.max(120, Math.min(worldHeight - 120, playerY - 70)),
-      height: 0,
-    }),
+    target: Object.freeze({ x: target.x, y: target.y, height: target.height }),
     speed: config.flightSpeed,
+  });
+}
+
+export function createDevelopmentServeTrajectory({
+  action,
+  teamId,
+  playerX,
+  playerY,
+  worldWidth,
+  worldHeight,
+}) {
+  const isJumpServe = action === PLAYER_ACTIONS.JUMP_SERVE;
+  if (!isJumpServe && action !== PLAYER_ACTIONS.SERVE) {
+    throw new RangeError(`無法建立非發球動作的開發球路：${action}`);
+  }
+  if (teamId !== "HOME" && teamId !== "AWAY") {
+    throw new RangeError(`未知的球隊識別：${teamId}`);
+  }
+  return Object.freeze({
+    ...createServeTrajectory({
+      action,
+      teamId,
+      playerX,
+      playerY,
+      target: {
+        x: teamId === "HOME"
+          ? worldWidth - DEVELOPMENT_SERVE_CONFIG.targetMarginX
+          : DEVELOPMENT_SERVE_CONFIG.targetMarginX,
+        y: Math.max(120, Math.min(worldHeight - 120, playerY - 70)),
+        height: 0,
+      },
+    }),
     source: "DEVELOPMENT_ONLY",
   });
 }

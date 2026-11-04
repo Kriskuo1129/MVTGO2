@@ -104,6 +104,7 @@ export class PlayerActionController {
           jumpFrameId: null,
           jumpHeight: 0,
           animations: [],
+          completion: null,
         });
         this.initialPlayerPositions.set(
           worldPlayer.playerId,
@@ -164,6 +165,18 @@ export class PlayerActionController {
     return this.#serve(state, true, serveTrajectory);
   }
 
+  playAndWait(playerId, action, options = {}) {
+    this.play(playerId, action, options);
+    const state = this.#getPlayer(playerId);
+    if (state.action === PLAYER_ACTIONS.IDLE) {
+      return Promise.resolve(Object.freeze({ playerId, action, status: "COMPLETED" }));
+    }
+    const generation = state.generation;
+    return new Promise((resolve) => {
+      state.completion = { generation, action, resolve };
+    });
+  }
+
   moveTo(playerId, targetX, targetY) {
     const state = this.#beginAction(playerId, PLAYER_ACTIONS.MOVE);
     const startX = state.worldPlayer.x;
@@ -204,6 +217,7 @@ export class PlayerActionController {
 
   interrupt(playerId) {
     const state = this.#getPlayer(playerId);
+    this.#resolveCompletion(state, "INTERRUPTED");
     this.#cancelStateAnimations(state);
     state.generation += 1;
     state.action = PLAYER_ACTIONS.IDLE;
@@ -303,10 +317,22 @@ export class PlayerActionController {
 
   #finishAction(state, generation) {
     if (!this.#isCurrent(state, generation)) return;
+    this.#resolveCompletion(state, "COMPLETED", generation);
     state.animations = [];
     state.action = PLAYER_ACTIONS.IDLE;
     state.jumpHeight = 0;
     this.#resetPresentation(state);
+  }
+
+  #resolveCompletion(state, status, generation = state.generation) {
+    const completion = state.completion;
+    if (!completion || completion.generation !== generation) return;
+    state.completion = null;
+    completion.resolve(Object.freeze({
+      playerId: state.playerId,
+      action: completion.action,
+      status,
+    }));
   }
 
   #receive(state) {
@@ -373,7 +399,7 @@ export class PlayerActionController {
       trajectory.tossStart.height,
     );
     const generation = state.generation;
-    this.#animateBallPath(
+    const ballPath = this.#animateBallPath(
       state.playerId,
       [trajectory.tossStart, trajectory.tossApex, trajectory.contact, trajectory.target],
       [config.tossRiseDuration, config.tossFallDuration],
@@ -396,6 +422,7 @@ export class PlayerActionController {
         config.attackStartTime,
       );
       return this.#trackAnimations(state, [
+        ballPath,
         timeline,
         animateElement(state.avatarLayer, getAttackFrames(state.teamId), {
           duration: attack.duration,
@@ -408,7 +435,7 @@ export class PlayerActionController {
       ]);
     }
 
-    return this.#trackAnimations(state, [timeline]);
+    return this.#trackAnimations(state, [ballPath, timeline]);
   }
 
   #assertBallAvailable(playerId) {
@@ -489,7 +516,14 @@ export class PlayerActionController {
     const startedAt = this.now();
     const tossDuration = tossDurations.reduce((sum, duration) => sum + duration, 0);
     const totalDuration = tossDuration + flight.duration;
-    const animation = { ownerPlayerId, ownerGeneration, frameId: null };
+    let resolveFinished;
+    const finished = new Promise((resolve) => { resolveFinished = resolve; });
+    const animation = {
+      ownerPlayerId,
+      ownerGeneration,
+      frameId: null,
+      resolveFinished,
+    };
     this.ballAnimation = animation;
 
     const step = (timestamp) => {
@@ -525,9 +559,16 @@ export class PlayerActionController {
         animation.frameId = this.requestFrame(step);
       } else {
         this.ballAnimation = null;
+        animation.resolveFinished();
       }
     };
     animation.frameId = this.requestFrame(step);
+    return Object.freeze({
+      finished,
+      cancel: () => {
+        if (this.ballAnimation === animation) this.#cancelBallAnimation();
+      },
+    });
   }
 
   #trackJumpHeight(
@@ -558,6 +599,7 @@ export class PlayerActionController {
   #cancelBallAnimation() {
     if (!this.ballAnimation) return;
     if (this.ballAnimation.frameId !== null) this.cancelFrame(this.ballAnimation.frameId);
+    this.ballAnimation.resolveFinished();
     this.ballAnimation = null;
   }
 }

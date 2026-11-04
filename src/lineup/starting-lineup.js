@@ -81,3 +81,13 @@ export function createStartingLineup(lineup, availablePlayers, team = "HOME") {
     assignments: Object.freeze({ ...lineup }),
   });
 }
+
+export function validateDefaultStartingLineup(defaultLineup, availablePlayers) {
+  if (!defaultLineup || typeof defaultLineup !== "object" || Array.isArray(defaultLineup)) {
+    throw new TypeError("預設先發必須是六個固定職位對應球員 ID 的物件。");
+  }
+  const normalizedLineup = Object.fromEntries(
+    LINEUP_POSITIONS.map((position) => [position, defaultLineup[position]]),
+  );
+  return { ...createStartingLineup(normalizedLineup, availablePlayers, "HOME").assignments };
+}

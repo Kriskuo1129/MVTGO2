@@ -2,7 +2,7 @@
 
 MVTGO2 是完全重新開發的排球即時系統。本 Repository 不沿用舊版 MVTGO 的程式、文件、素材、座標或規則。
 
-目前完成範圍為 **Phase 2C：正式高度、接觸點與排球飛行系統**。首頁可建立固定、可重現的測試球員資料，完成 HOME 六人先發後建立正式 Match，並在正式球場畫面使用共用球員動作與排球軌跡 API。
+目前完成範圍為 **Phase 3A：即時 Match Engine 與發球 ACE／失誤**。正式遊戲首頁將已驗證資料交給比賽主程式，完成先發確認後建立 Match；單次發球事件由正式 Engine 依序執行 Resolver、Player Behavior、動畫完成等待及 Rules 得分結算。
 
 ## 架構原則
 
@@ -16,7 +16,6 @@ MVTGO2 是完全重新開發的排球即時系統。本 Repository 不沿用舊�
 - Match 的唯一排球具有獨立高度，並共用正式接觸點與球路機制；目前只有發球完成球員與排球同步，其他觸球動作等待 Rally 串接。
 - 比賽系統負責觸球、能力、結果與比分判定，不採用完整物理引擎。
 - 站位、速度、球路及行為設定採模組化設定檔，透過修改設定調整，不開發 Editor。
-- Viewer 僅能是輕量輔助工具，不另建比賽模擬系統。
 - 遵循當前階段的明確需求，不預先擴充未定義規則、戰術或管理器。
 
 ## 專案結構
@@ -32,7 +31,8 @@ MVTGO_NEW/
 └─ src/
    ├─ main.js
    ├─ config/
-   │  └─ app.config.js
+   │  ├─ app.config.js
+   │  └─ match-params.js
    ├─ court/
    │  ├─ ball-trajectory.js
    │  ├─ camera.js
@@ -50,10 +50,21 @@ MVTGO_NEW/
    ├─ lineup/
    │  └─ starting-lineup.js
    ├─ match/
+   │  ├─ match-main.js
+   │  ├─ match-engine.js
+   │  ├─ match-resolver.js
+   │  ├─ match-rules.js
+   │  ├─ player-behavior.js
+   │  ├─ lineup-ui.js
+   │  ├─ create-pregame-match-input.js
    │  ├─ create-match.js
    │  └─ match-state.js
    ├─ models/
    │  └─ player.js
+   ├─ testing/
+   │  ├─ create-test-pregame-match-input.js
+   │  ├─ create-random-test-lineup.js
+   │  └─ serve-result-override.js
    ├─ utils/
    │  └─ player-name-generator.js
    └─ styles/
@@ -68,10 +79,10 @@ MVTGO_NEW/
 
 | 參數 | 預設值 | 接線狀態 |
 | --- | --- | --- |
-| `BALL_SPEED_DEFAULT` | 1450 | 已接線：未指定速度的一般球路 |
-| `SERVE_SPEED_NORMAL` | 1550 | 已接線：正式 SERVE |
-| `JUMP_SERVE_SPEED` | 1750 | 已接線：正式 JUMP_SERVE |
-| `PLAYER_MOVE_SPEED` | 560 | 已接線：正式 MOVE |
+| `BALL_SPEED_DEFAULT` | 725 | 已接線：未指定速度的一般球路 |
+| `SERVE_SPEED_NORMAL` | 700 | 已接線：正式 SERVE |
+| `JUMP_SERVE_SPEED` | 900 | 已接線：正式 JUMP_SERVE |
+| `PLAYER_MOVE_SPEED` | 400 | 已接線：正式 MOVE |
 | `SERVE_SPEED_SLOW` | 1300 | 尚未接線：預留 |
 | `SERVE_SPEED_FAST` | 1750 | 尚未接線：預留 |
 | `SERVE_SPEED_MAX` | 2000 | 尚未接線：預留 |
@@ -87,11 +98,17 @@ MVTGO_NEW/
 
 ## Phase 1A 操作方式
 
-1. 在首頁點選「取得測試球員資料」。
+1. 在首頁點選「比賽測試系統」；「開始遊戲」將於未來養成系統完成後開放。
 2. 在 HOME 先發名單畫面點擊六個槽位，從選人視窗安排球員。
 3. 同一球員被選取後，其他槽位會停用該球員；可更換或清除既有選擇。
 4. 六個職位完成後，點選「確認」產生正式配置資料。
 5. 系統使用雙方球員與先發配置建立正式 Match，並進入球場畫面。
+
+賽前資料可透過 `homeDefaultStartingLineup` 傳入 HOME 預設先發，格式為六個固定槽位對應穩定球員 ID；合法資料會先填入既有先發畫面，玩家仍需確認且可手動更換。無效資料會安全退回手動選擇。首頁「比賽測試系統」由 `src/testing/create-test-pregame-match-input.js` 準備測試球員與隨機先發，再通過正式輸入驗證；後續共用正式編輯、Match 建立與確認流程，且與網址的 `?dev` 開發工具互不相同。
+
+外部系統應先呼叫 `src/match/create-pregame-match-input.js` 的 `createPregameMatchInput()` 建立正式賽前輸入，再交給 `beginPregameFlow()`。此入口會使用正式球員模型重新驗證並封存雙方名單；AWAY 先發必須明確提供六個職位與球員 ID，不依賴名單陣列順序。
+
+`src/main.js` 是《系排GO》遊戲主程式入口，只負責首頁初始化、維持尚未開放的「開始遊戲」入口，以及將「比賽測試系統」準備的資料交給比賽系統。`src/match/match-main.js` 是比賽主程式，接收已驗證輸入並管理賽前流程、正式 Match 建立與球場啟動；`src/match/lineup-ui.js` 只管理先發槽位、選人視窗、能力顯示與選擇／清除／確認操作，不自行建立 Match。正式資料由 `createPregameMatchInput()` 準備，測試資料由 `src/testing/create-test-pregame-match-input.js` 準備。
 
 球員資料包含唯一 ID、名稱、擅長職位（`S`、`OH`、`MB`、`OP`）、五項能力、情緒、發球類型與可為空的頭像識別欄位。測試資料和未來正式資料共用相同格式。
 
@@ -139,8 +156,23 @@ MVTGO_NEW/
 - 正式 SERVE／JUMP_SERVE 的 `serveTrajectory` 必須由上層提供拋球點、接觸點與目標；控制器驗證接觸點後，以正式速度執行簡單線性飛行，不判定碰撞、得分或結果。
 - `?dev` 沿用正式控制器與軌跡介面，並顯示排球目前的世界 X、Y 與高度。
 
+### Phase 2G：遊戲主程式與比賽系統責任整理
+
+- `src/main.js` 定位為整個《系排GO》的首頁入口，不包含先發 UI、Match 建立或球場初始化細節。
+- `src/match/match-main.js` 統一接收正式比賽輸入，串接賽前先發確認、Match 建立及正式球場畫面。
+- `src/match/lineup-ui.js` 封裝六個先發槽位與球員選擇操作，並沿用 `starting-lineup.js` 的正式驗證與編輯邏輯。
+- 正式資料與測試資料只在準備來源上分離，後續共用相同比賽主流程、Match、球場、Camera、動畫及未來即時系統。
+
+### Phase 3A：即時 Match Engine 與發球事件
+
+- `src/match/match-engine.js` 管理單次發球事件狀態，只在正式動畫完成後呼叫規則結算，結束後不自動開始下一次 Rally。
+- `src/match/match-resolver.js` 使用發球能力、發球類型及可注入亂數判定 ACE 或發球失誤；目前公式為集中管理的暫定平衡。
+- `src/match/player-behavior.js` 依發球權、輪轉及正式先發安排發球員、動作與球路目標，其他十一名球員不執行額外動作。
+- `src/match/match-rules.js` 統一處理 ACE／發球失誤得分及下一發球權；OUT 與 NET 只影響球路呈現，規則結果相同。
+- 比賽測試系統可強制指定 ACE、OUT 或 NET，但覆寫發生在正式 Resolver 完成後，後續仍使用正式 Behavior、動畫與 Rules。
+
 1. 定義並接入正式球員資料來源。
 2. 依核准規格逐步加入即時比賽狀態。
 3. 在規則與資料契約確認後，才串接其他觸球動作與正式 Rally 流程。
 
-完整 Rally、Viewer、戰術介面、換人、輪轉計算與站位編輯尚未實作。
+完整 Rally、戰術介面、換人、輪轉計算與站位編輯尚未實作。

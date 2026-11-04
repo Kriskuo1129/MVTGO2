@@ -45,6 +45,7 @@ export function createMatch({
   awayPlayers,
   homeStartingLineup,
   awayStartingLineup,
+  testMode = false,
 }) {
   assertText(id, "比賽 ID");
   assertText(name, "比賽名稱");
@@ -61,6 +62,9 @@ export function createMatch({
   }
   validateStartingLineup(homeStartingLineup, homePlayers, "HOME");
   validateStartingLineup(awayStartingLineup, awayPlayers, "AWAY");
+  if (typeof testMode !== "boolean") {
+    throw new TypeError("比賽測試模式識別必須是布林值。");
+  }
 
   const initialState = createInitialMatchState();
   const scene = createInitialWorldScene(homeStartingLineup, awayStartingLineup);
@@ -68,6 +72,7 @@ export function createMatch({
     id: id.trim(),
     name: name.trim(),
     courtId,
+    environment: Object.freeze({ testMode }),
     teams: Object.freeze({
       HOME: Object.freeze({
         name: homeTeamName.trim(),

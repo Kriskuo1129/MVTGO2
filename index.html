@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="系排GO MVTGO2 正式賽前先發名單安排"
+      content="系排GO MVTGO2 遊戲主程式入口"
     />
     <title>系排GO MVTGO2</title>
     <link rel="stylesheet" href="./src/styles/main.css" />
@@ -16,10 +16,16 @@
         <div class="hero">
           <p class="eyebrow">MVTGO2</p>
           <h1 id="page-title">系排GO MVTGO2</h1>
-          <p class="hero__description">從正式賽前流程建立本場比賽的先發名單。</p>
-          <button id="test-player-button" class="primary-button" type="button">
-            取得測試球員資料
-          </button>
+          <p class="hero__description">建立球隊、培育球員，迎接每一場正式賽事。</p>
+          <div class="home-actions">
+            <button id="start-game-button" class="primary-button" type="button" disabled>
+              開始遊戲
+            </button>
+            <p id="start-game-status" class="feature-status">養成系統尚未開放</p>
+            <button id="match-test-button" class="secondary-button" type="button">
+              比賽測試系統
+            </button>
+          </div>
         </div>
       </section>
 
@@ -32,6 +38,7 @@
             <span aria-hidden="true">VS</span>
             <span id="opponent-team-name">對手球隊</span>
           </p>
+          <p id="lineup-notice" class="lineup-notice" role="status" aria-live="polite"></p>
         </header>
 
         <section class="lineup-board" aria-label="先發名單">
@@ -59,6 +66,16 @@
             <span id="court-away-team-name">對手球隊</span>
           </div>
         </header>
+
+        <section id="serve-result-test-controls" class="serve-result-test-controls" aria-label="單次發球測試" hidden>
+          <h2>單次發球測試</h2>
+          <div>
+            <button type="button" data-serve-test-result="ACE">測試 ACE</button>
+            <button type="button" data-serve-test-result="OUT">測試出界</button>
+            <button type="button" data-serve-test-result="NET">測試掛網</button>
+          </div>
+          <p id="serve-result-test-status" role="status" aria-live="polite"></p>
+        </section>
 
         <section id="court-dev-animation" class="court-dev-animation" aria-label="正式球員動作測試" hidden>
           <h2>正式球員動作測試</h2>

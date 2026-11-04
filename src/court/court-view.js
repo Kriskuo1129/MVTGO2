@@ -2,6 +2,7 @@ import { HorizontalCamera } from "./camera.js";
 import { getCourtConfig } from "./court-config.js";
 import {
   createDevelopmentServeTrajectory,
+  createServeTrajectory,
   PLAYER_ACTIONS,
   PLAYER_ACTION_TYPES,
 } from "./player-action-config.js";
@@ -98,8 +99,11 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
   rootElement.querySelector("#court-match-name").textContent = match.name;
   rootElement.querySelector("#court-home-team-name").textContent = match.teams.HOME.name;
   rootElement.querySelector("#court-away-team-name").textContent = match.teams.AWAY.name;
-  rootElement.querySelector("#court-home-score").textContent = String(match.score.HOME);
-  rootElement.querySelector("#court-away-score").textContent = String(match.score.AWAY);
+  function updateScoreboard() {
+    rootElement.querySelector("#court-home-score").textContent = String(match.score.HOME);
+    rootElement.querySelector("#court-away-score").textContent = String(match.score.AWAY);
+  }
+  updateScoreboard();
 
   const worldElement = rootElement.querySelector("#court-world");
   const viewportElement = rootElement.querySelector("#court-viewport");
@@ -180,6 +184,39 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
     ballElement,
     onBallPositionChange: updateBallPresentation,
   });
+  let formalBehaviorActive = false;
+
+  async function playBehaviorCommands(commands) {
+    if (!Array.isArray(commands) || commands.length === 0) {
+      throw new TypeError("正式行為命令必須是非空陣列。");
+    }
+    if (formalBehaviorActive) throw new Error("正式行為動畫正在執行中。");
+    formalBehaviorActive = true;
+    try {
+      const completions = await Promise.all(commands.map((command) => {
+        const playerState = actionController.getPlayerState(command.playerId);
+        let options = {};
+        if (command.ballTrajectory?.kind === "SERVE_RESULT") {
+          options = {
+            serveTrajectory: createServeTrajectory({
+              action: command.action,
+              teamId: playerState.teamId,
+              playerX: playerState.x,
+              playerY: playerState.y,
+              target: command.ballTrajectory.target,
+            }),
+          };
+        }
+        return actionController.playAndWait(command.playerId, command.action, options);
+      }));
+      if (completions.some((completion) => completion.status !== "COMPLETED")) {
+        throw new Error("正式行為動畫在完成前遭到中斷。");
+      }
+      return Object.freeze(completions);
+    } finally {
+      formalBehaviorActive = false;
+    }
+  }
 
   const devTools = rootElement.querySelector("#court-dev-tools");
   const animationDevTools = rootElement.querySelector("#court-dev-animation");
@@ -209,6 +246,7 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
 
   viewportElement.addEventListener("click", handleWorldClick);
   const handleBallInput = () => {
+    if (formalBehaviorActive) return;
     const nextX = Number(ballControl.value);
     if (!Number.isFinite(nextX)) return;
     match.scene.ball.x = Math.min(Math.max(nextX, 0), match.scene.width);
@@ -224,6 +262,7 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
     moveFields.hidden = actionControl.value !== PLAYER_ACTIONS.MOVE;
   };
   const handleRunAction = () => {
+    if (formalBehaviorActive) return;
     if (!playerControl.value) return;
     let options = {};
     if (actionControl.value === PLAYER_ACTIONS.MOVE) {
@@ -247,6 +286,7 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
     actionController.play(playerControl.value, actionControl.value, options);
   };
   const handleResetActions = () => {
+    if (formalBehaviorActive) return;
     actionController.resetAll();
     ballControl.value = String(match.scene.ball.x);
     handlePlayerSelection();
@@ -289,6 +329,8 @@ export function renderCourtView(match, rootElement, { developmentMode = false } 
   return Object.freeze({
     camera,
     actionController,
+    playBehaviorCommands,
+    updateScoreboard,
     followBall,
     resizeCamera,
     destroy() {
