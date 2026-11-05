@@ -25,8 +25,108 @@
             <button id="match-test-button" class="secondary-button" type="button">
               比賽測試系統
             </button>
+            <button id="simulator-button" class="secondary-button" type="button">
+              單人追球實驗
+            </button>
+            <button id="team-simulator-button" class="secondary-button" type="button">
+              六人接發球實驗
+            </button>
           </div>
         </div>
+      </section>
+
+      <section id="simulator-view" class="simulator-view" aria-labelledby="simulator-title" hidden>
+        <header class="simulator-header">
+          <div>
+            <p class="eyebrow">SIMULATOR LAB</p>
+            <h1 id="simulator-title" tabindex="-1">單人追球實驗</h1>
+          </div>
+          <button id="simulator-back" class="secondary-button" type="button">返回首頁</button>
+        </header>
+
+        <p class="simulator-intro">
+          調整參數後點擊球場指定落點。結果只由固定時間步進、球員移動與實際接觸判定產生。
+        </p>
+
+        <section class="simulator-parameters" aria-label="實驗參數">
+          <label>球員顯示尺寸<input id="simulator-avatar-size" type="number" min="32" max="160" step="1" /></label>
+          <label>接球移動速度<input id="simulator-player-speed" type="number" min="20" max="1600" step="10" /></label>
+          <label>有效接球範圍<input id="simulator-contact-range" type="number" min="10" max="240" step="1" /></label>
+          <label>球的飛行時間<input id="simulator-flight-duration" type="number" min="0.7" max="1.5" step="0.1" /></label>
+          <label>球員初始 X<input id="simulator-player-x" type="number" min="0" max="2280" step="10" /></label>
+          <label>球員初始 Y<input id="simulator-player-y" type="number" min="0" max="900" step="10" /></label>
+          <button id="simulator-reset" class="secondary-button" type="button">重設參數</button>
+        </section>
+
+        <div id="simulator-viewport" class="simulator-viewport" aria-label="點擊指定發球落點">
+          <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
+          <span id="simulator-target" class="simulator-target" hidden aria-hidden="true"></span>
+          <span id="simulator-player" class="simulator-player" aria-label="追球球員">
+            <span id="simulator-player-avatar" class="simulator-player__avatar">實驗</span>
+          </span>
+          <span id="simulator-ball" class="simulator-ball" hidden aria-label="排球"></span>
+        </div>
+
+        <div class="simulator-output" aria-live="polite">
+          <p id="simulator-status" data-state="READY">點擊球場指定發球落點。</p>
+          <p id="simulator-telemetry">時間 0.00 s｜球 (250, 450, 高 72)｜球員 (1140, 650)</p>
+        </div>
+      </section>
+
+      <section id="team-simulator-view" class="simulator-view" aria-labelledby="team-simulator-title" hidden>
+        <header class="simulator-header">
+          <div>
+            <p class="eyebrow">SIMULATOR LAB</p>
+            <h1 id="team-simulator-title" tabindex="-1">六人接發球實驗</h1>
+          </div>
+          <button id="team-simulator-back" class="secondary-button" type="button">返回首頁</button>
+        </header>
+
+        <p class="simulator-intro">
+          點擊球場指定落點。Team Coordination 會指定一名主要接球員，其餘球員維持戰術站位。
+        </p>
+
+        <section class="team-simulator-toolbar" aria-label="六人接球實驗操作">
+          <label>鏡頭模式
+            <select id="team-simulator-camera-mode">
+              <option value="FULL_COURT">完整球場</option>
+              <option value="FOLLOW_BALL">動態跟球</option>
+            </select>
+          </label>
+          <button id="team-simulator-settings" class="secondary-button" type="button">測試設定</button>
+          <button id="team-simulator-reset" class="secondary-button" type="button">重設參數</button>
+        </section>
+
+        <div id="team-simulator-viewport" class="simulator-viewport team-simulator-viewport" aria-label="點擊指定六人接球落點">
+          <div id="team-simulator-world" class="team-simulator-world">
+            <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
+            <span id="team-simulator-target" class="simulator-target" hidden aria-hidden="true"></span>
+            <span id="team-simulator-ball" class="simulator-ball" hidden aria-label="排球"></span>
+          </div>
+        </div>
+
+        <div class="simulator-output" aria-live="polite">
+          <p id="team-simulator-status" data-state="READY">點擊球場指定發球落點。</p>
+          <p id="team-simulator-telemetry">球路 HIGH_ARC｜時間 0.00 s｜責任 尚未分配</p>
+        </div>
+
+        <dialog id="team-simulator-settings-dialog" class="team-simulator-settings" aria-labelledby="team-simulator-settings-title">
+          <div class="team-simulator-settings__header">
+            <h2 id="team-simulator-settings-title">測試設定</h2>
+            <button id="team-simulator-settings-close" class="dialog-close" type="button" aria-label="關閉測試設定">×</button>
+          </div>
+          <div class="simulator-parameters" aria-label="六人接球實驗參數">
+            <label>球員顯示尺寸<input id="team-simulator-avatar-size" type="number" min="32" max="160" step="1" /></label>
+            <label>接球移動速度<input id="team-simulator-player-speed" type="number" min="20" max="1600" step="10" /></label>
+            <label>有效接球範圍<input id="team-simulator-contact-range" type="number" min="10" max="240" step="1" /></label>
+            <label>球的飛行時間<input id="team-simulator-flight-duration" type="number" min="0.7" max="1.5" step="0.1" /></label>
+          </div>
+          <p id="team-simulator-settings-error" class="team-simulator-settings__error" role="alert"></p>
+          <div class="team-simulator-settings__actions">
+            <button id="team-simulator-settings-cancel" class="secondary-button" type="button">取消</button>
+            <button id="team-simulator-settings-apply" class="primary-button" type="button">套用設定</button>
+          </div>
+        </dialog>
       </section>
 
       <section id="lineup-view" class="lineup-view" aria-labelledby="lineup-title" hidden>

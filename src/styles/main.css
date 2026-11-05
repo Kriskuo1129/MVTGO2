@@ -880,6 +880,333 @@ tbody tr:hover {
   }
 }
 
+.simulator-view {
+  width: min(100%, 52rem);
+  margin-inline: auto;
+}
+
+.simulator-view[hidden] {
+  display: none;
+}
+
+.simulator-header {
+  display: flex;
+  gap: 1rem;
+  align-items: end;
+  justify-content: space-between;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--color-border-strong);
+}
+
+.simulator-header h1,
+.simulator-intro,
+.simulator-output p {
+  margin: 0;
+}
+
+.simulator-intro {
+  margin-block: 0.85rem;
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.simulator-parameters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+}
+
+.simulator-parameters label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.simulator-parameters input,
+.simulator-parameters select {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  font: inherit;
+}
+
+.team-simulator-world {
+  position: absolute;
+  overflow: visible;
+}
+
+.team-simulator-world > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.simulator-parameters button {
+  align-self: end;
+}
+
+.team-simulator-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.team-simulator-toolbar label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: min(100%, 12rem);
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.team-simulator-toolbar select {
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  font: inherit;
+}
+
+.team-simulator-settings {
+  width: min(calc(100% - 1rem), 34rem);
+  max-height: 92dvh;
+  padding: 0;
+  color: var(--color-text);
+  background: #0d0d0d;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: none;
+}
+
+.team-simulator-settings::backdrop {
+  background: rgb(0 0 0 / 82%);
+}
+
+.team-simulator-settings__header,
+.team-simulator-settings__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.team-simulator-settings__header h2 {
+  margin: 0;
+}
+
+.team-simulator-settings .simulator-parameters {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border: 0;
+}
+
+.team-simulator-settings__error {
+  min-height: 1.5em;
+  margin: 0;
+  padding: 0 1.25rem 0.75rem;
+  color: #ff7777;
+  font-size: 0.82rem;
+}
+
+.team-simulator-settings__actions {
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 0;
+}
+
+@media (max-width: 34rem) {
+  .team-simulator-settings .simulator-parameters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.simulator-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2280 / 900;
+  overflow: hidden;
+  background: #111111;
+  border: 1px solid var(--color-border-strong);
+  cursor: crosshair;
+  touch-action: manipulation;
+}
+
+.team-simulator-viewport {
+  height: clamp(22rem, 62dvh, 38rem);
+  min-height: 22rem;
+  aspect-ratio: auto;
+}
+
+.simulator-viewport > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.simulator-player,
+.simulator-ball,
+.simulator-target {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.simulator-player {
+  z-index: 2;
+}
+
+.team-simulator-player .simulator-player__avatar {
+  border-color: #d8d8d8;
+}
+
+.team-simulator-player.is-primary-receiver .simulator-player__avatar {
+  color: #111111;
+  background: var(--color-gold);
+  border-color: #ffffff;
+}
+
+.team-simulator-player.is-touch-eligible .simulator-player__avatar {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+}
+
+.simulator-player__avatar {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 72px;
+  height: 72px;
+  color: #ffffff;
+  background: #151515;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 800;
+  transform: rotate(0deg) scale(1);
+  transform-origin: center;
+}
+
+.simulator-player__avatar.is-receiving.receive-from-left {
+  animation: simulator-receive-from-left 460ms ease-out both;
+}
+
+.simulator-player__avatar.is-receiving.receive-from-right {
+  animation: simulator-receive-from-right 460ms ease-out both;
+}
+
+@keyframes simulator-receive-from-left {
+  0% { transform: rotate(0deg) scale(1); }
+  38% { transform: rotate(-45deg) scale(1.16, 0.56); }
+  72% { transform: rotate(-10deg) scale(0.94, 1.08); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+@keyframes simulator-receive-from-right {
+  0% { transform: rotate(0deg) scale(1); }
+  38% { transform: rotate(45deg) scale(1.16, 0.56); }
+  72% { transform: rotate(10deg) scale(0.94, 1.08); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+.simulator-ball {
+  z-index: 3;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  background: #ffffff;
+  border: 2px solid #111111;
+  border-radius: 50%;
+}
+
+.simulator-target {
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-gold);
+  border-radius: 50%;
+}
+
+.simulator-target::before,
+.simulator-target::after {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  content: "";
+  background: var(--color-gold);
+  transform: translate(-50%, -50%);
+}
+
+.simulator-target::before {
+  width: 30px;
+  height: 1px;
+}
+
+.simulator-target::after {
+  width: 1px;
+  height: 30px;
+}
+
+.simulator-output {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+}
+
+#simulator-status[data-state="CONTACTED"] {
+  color: var(--color-gold-bright);
+}
+
+#simulator-status[data-state="MISSED"] {
+  color: #ff7b7b;
+}
+
+#simulator-telemetry {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 40rem) {
+  .simulator-parameters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 24rem) {
+  .simulator-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .simulator-parameters {
+    grid-template-columns: 1fr;
+  }
+
+  .simulator-player__avatar {
+    border-width: 2px;
+  }
+}
+
 .court-viewport {
   position: relative;
   width: 100%;

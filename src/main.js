@@ -2,10 +2,45 @@ import { APP_CONFIG } from "./config/app.config.js";
 import { beginPregameFlow } from "./match/match-main.js";
 import { createTestPregameMatchInput } from "./testing/create-test-pregame-match-input.js";
 import { setupServeResultTestControls } from "./testing/serve-result-override.js";
+import { createSinglePlayerSimulatorApp } from "./simulator/simulator-main.js";
+import { createTeamSimulatorApp } from "./simulator/team-simulator-main.js";
 
 document.title = APP_CONFIG.title;
 
 const matchTestButton = document.querySelector("#match-test-button");
+const simulatorButton = document.querySelector("#simulator-button");
+const teamSimulatorButton = document.querySelector("#team-simulator-button");
+const homeView = document.querySelector("#home-view");
+const simulatorView = document.querySelector("#simulator-view");
+const teamSimulatorView = document.querySelector("#team-simulator-view");
+
+const simulatorApp = createSinglePlayerSimulatorApp({
+  root: simulatorView,
+  onExit() {
+    simulatorApp.hide();
+    homeView.hidden = false;
+    simulatorButton.focus({ preventScroll: true });
+  },
+});
+
+simulatorButton.addEventListener("click", () => {
+  homeView.hidden = true;
+  simulatorApp.show();
+});
+
+const teamSimulatorApp = createTeamSimulatorApp({
+  root: teamSimulatorView,
+  onExit() {
+    teamSimulatorApp.hide();
+    homeView.hidden = false;
+    teamSimulatorButton.focus({ preventScroll: true });
+  },
+});
+
+teamSimulatorButton.addEventListener("click", () => {
+  homeView.hidden = true;
+  teamSimulatorApp.show();
+});
 
 matchTestButton.addEventListener("click", () => {
   // [MVTGO_TEST_HOOK]
