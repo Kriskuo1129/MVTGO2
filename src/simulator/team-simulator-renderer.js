@@ -18,6 +18,7 @@ export class TeamSimulatorRenderer {
     this.status = root.querySelector("#team-simulator-status");
     this.telemetry = root.querySelector("#team-simulator-telemetry");
     this.playerElements = new Map();
+    this.playerAppearances = new Map();
     this.frameId = null;
     this.layoutFrameId = null;
     this.lastTimestamp = null;
@@ -52,12 +53,47 @@ export class TeamSimulatorRenderer {
     wrapper.dataset.playerId = player.id;
     const avatar = document.createElement("span");
     avatar.className = "simulator-player__avatar";
-    avatar.textContent = player.position;
+    const fallback = document.createElement("span");
+    fallback.className = "simulator-player__fallback";
+    fallback.textContent = player.position;
+    const image = document.createElement("img");
+    image.className = "simulator-player__photo";
+    image.alt = "";
+    image.hidden = true;
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      fallback.hidden = false;
+    });
+    avatar.append(fallback, image);
     wrapper.append(avatar);
     this.world.append(wrapper);
-    const elements = Object.freeze({ wrapper, avatar });
+    const elements = Object.freeze({ wrapper, avatar, fallback, image });
     this.playerElements.set(player.id, elements);
+    this.applyPlayerAppearance(player.id, elements);
     return elements;
+  }
+
+  setPlayerAppearance(playerId, appearance) {
+    this.playerAppearances.set(playerId, { ...appearance });
+    const elements = this.playerElements.get(playerId);
+    if (elements) this.applyPlayerAppearance(playerId, elements);
+  }
+
+  applyPlayerAppearance(playerId, elements) {
+    const appearance = this.playerAppearances.get(playerId);
+    if (!appearance) return;
+    elements.avatar.style.backgroundColor = appearance.skinColor;
+    const photoUrl = appearance.photoUrl || "";
+    if (photoUrl) {
+      if (elements.image.getAttribute("src") !== photoUrl) elements.image.src = photoUrl;
+    } else {
+      elements.image.removeAttribute("src");
+    }
+    elements.image.hidden = !appearance.photoUrl;
+    elements.fallback.hidden = Boolean(appearance.photoUrl);
+    elements.image.style.setProperty("--photo-zoom", String(appearance.zoom));
+    elements.image.style.setProperty("--photo-x", `${appearance.offsetX}%`);
+    elements.image.style.setProperty("--photo-y", `${appearance.offsetY}%`);
   }
 
   play(simulator) {

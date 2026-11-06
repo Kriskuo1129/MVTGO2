@@ -990,6 +990,7 @@ tbody tr:hover {
   background: #0d0d0d;
   border: 1px solid var(--color-border-strong);
   box-shadow: none;
+  overflow-y: auto;
 }
 
 .team-simulator-settings::backdrop {
@@ -1075,13 +1076,12 @@ tbody tr:hover {
 }
 
 .team-simulator-player .simulator-player__avatar {
-  border-color: #d8d8d8;
+  border-color: #000000;
 }
 
 .team-simulator-player.is-primary-receiver .simulator-player__avatar {
-  color: #111111;
-  background: var(--color-gold);
-  border-color: #ffffff;
+  border-color: #000000;
+  box-shadow: 0 0 0 4px var(--color-gold);
 }
 
 .team-simulator-player.is-touch-eligible .simulator-player__avatar {
@@ -1090,6 +1090,7 @@ tbody tr:hover {
 }
 
 .simulator-player__avatar {
+  position: relative;
   display: grid;
   place-items: center;
   box-sizing: border-box;
@@ -1103,6 +1104,99 @@ tbody tr:hover {
   font-weight: 800;
   transform: rotate(0deg) scale(1);
   transform-origin: center;
+  overflow: hidden;
+}
+
+.simulator-player__fallback {
+  position: relative;
+  z-index: 1;
+  color: #17110d;
+}
+
+.simulator-player__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  image-orientation: from-image;
+  transform: translate(var(--photo-x, 0), var(--photo-y, 0)) scale(var(--photo-zoom, 1));
+  transform-origin: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.team-player-appearance {
+  padding: 0.9rem 1.25rem 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.team-player-appearance h3,
+.team-player-appearance__note {
+  margin: 0;
+}
+
+.team-player-appearance__editor {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin-top: 0.75rem;
+}
+
+.team-player-appearance__preview {
+  width: 7rem;
+  height: 7rem;
+  border-color: #000000;
+  font-size: 1.1rem;
+}
+
+.team-player-appearance__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.team-player-appearance__fields label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.team-player-appearance__fields input,
+.team-player-appearance__fields select {
+  min-width: 0;
+  min-height: 2.5rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+}
+
+.team-player-appearance__fields input[type="range"] {
+  min-height: 1.5rem;
+}
+
+.team-player-appearance__note {
+  margin-top: 0.75rem;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 34rem) {
+  .team-player-appearance__editor {
+    grid-template-columns: 1fr;
+  }
+
+  .team-player-appearance__preview {
+    justify-self: center;
+  }
+
+  .team-player-appearance__fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .simulator-player__avatar.is-receiving.receive-from-left {

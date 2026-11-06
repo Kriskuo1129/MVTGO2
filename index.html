@@ -121,6 +121,42 @@
             <label>有效接球範圍<input id="team-simulator-contact-range" type="number" min="10" max="240" step="1" /></label>
             <label>球的飛行時間<input id="team-simulator-flight-duration" type="number" min="0.7" max="1.5" step="0.1" /></label>
           </div>
+          <section class="team-player-appearance" aria-labelledby="team-player-appearance-title">
+            <h3 id="team-player-appearance-title">球員外觀</h3>
+            <div class="team-player-appearance__editor">
+              <div id="team-player-appearance-preview" class="simulator-player__avatar team-player-appearance__preview" aria-label="球員外觀預覽">
+                <span id="team-player-appearance-fallback">S</span>
+                <img id="team-player-appearance-image" class="simulator-player__photo" alt="本機球員照片預覽" hidden />
+              </div>
+              <div class="team-player-appearance__fields">
+                <label>球員
+                  <select id="team-player-appearance-player"></select>
+                </label>
+                <label>本機照片
+                  <input id="team-player-appearance-file" type="file" accept="image/*" />
+                </label>
+                <label>膚色
+                  <select id="team-player-appearance-skin">
+                    <option value="#F4D5BF">淺膚</option>
+                    <option value="#E5B18B">自然膚</option>
+                    <option value="#B87951">小麥膚</option>
+                    <option value="#70432F">深膚</option>
+                  </select>
+                </label>
+                <label>照片縮放
+                  <input id="team-player-appearance-zoom" type="range" min="1" max="3" step="0.05" value="1" />
+                </label>
+                <label>水平位置
+                  <input id="team-player-appearance-x" type="range" min="-50" max="50" step="1" value="0" />
+                </label>
+                <label>垂直位置
+                  <input id="team-player-appearance-y" type="range" min="-50" max="50" step="1" value="0" />
+                </label>
+                <button id="team-player-appearance-remove" class="secondary-button" type="button">移除照片</button>
+              </div>
+            </div>
+            <p class="team-player-appearance__note">照片只在本機預覽，不會上傳或影響模擬判定。</p>
+          </section>
           <p id="team-simulator-settings-error" class="team-simulator-settings__error" role="alert"></p>
           <div class="team-simulator-settings__actions">
             <button id="team-simulator-settings-cancel" class="secondary-button" type="button">取消</button>
