@@ -22,6 +22,7 @@ export class TeamSimulatorRenderer {
     this.target = root.querySelector("#team-simulator-target");
     this.status = root.querySelector("#team-simulator-status");
     this.telemetry = root.querySelector("#team-simulator-telemetry");
+    this.debug = root.querySelector("#team-simulator-debug");
     this.playerElements = new Map();
     this.playerAppearances = new Map();
     this.frameId = null;
@@ -29,6 +30,7 @@ export class TeamSimulatorRenderer {
     this.lastTimestamp = null;
     this.simulator = null;
     this.lastSnapshot = null;
+    this.interactionEnabled = true;
     this.camera = new SimulatorCameraController({ world: SIMULATOR_WORLD });
     this.handleClick = this.handleClick.bind(this);
     this.viewport.addEventListener("click", this.handleClick);
@@ -41,6 +43,7 @@ export class TeamSimulatorRenderer {
   }
 
   handleClick(event) {
+    if (!this.interactionEnabled) return;
     const rect = this.viewport.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     this.onTargetSelected(this.camera.screenToWorld({
@@ -49,6 +52,24 @@ export class TeamSimulatorRenderer {
       viewportWidth: rect.width,
       viewportHeight: rect.height,
     }));
+  }
+
+  setInteractionEnabled(enabled) {
+    this.interactionEnabled = Boolean(enabled);
+    this.viewport.setAttribute("aria-disabled", String(!this.interactionEnabled));
+  }
+
+  clientToWorld(clientX, clientY) {
+    const rect = this.viewport.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      throw new RangeError("球場尚未取得有效顯示尺寸。");
+    }
+    return this.camera.screenToWorld({
+      screenX: clientX - rect.left,
+      screenY: clientY - rect.top,
+      viewportWidth: rect.width,
+      viewportHeight: rect.height,
+    });
   }
 
   ensurePlayerElement(player) {
@@ -122,19 +143,21 @@ export class TeamSimulatorRenderer {
     const deltaSeconds = Math.max(0, (timestamp - this.lastTimestamp) / 1000);
     this.lastTimestamp = timestamp;
     const snapshot = this.simulator.updateFrame(deltaSeconds);
+    if (snapshot.status === "PASS_IN_FLIGHT" && this.lastSnapshot?.status !== "PASS_IN_FLIGHT") {
+      this.beginCameraFollow(snapshot);
+    }
     const viewportRect = this.viewport.getBoundingClientRect();
     if (viewportRect.width > 0 && viewportRect.height > 0) {
       this.camera.update({
         ballX: snapshot.ball.x,
-        remainingFlightTime: snapshot.parameters.flightDuration
-          * Math.max(0, 1 - snapshot.ball.progress),
+        remainingFlightTime: snapshot.ball.duration * Math.max(0, 1 - snapshot.ball.progress),
         deltaSeconds,
         viewportWidth: viewportRect.width,
         viewportHeight: viewportRect.height,
       });
     }
     this.render(snapshot);
-    if (snapshot.status === "RUNNING") {
+    if (snapshot.status === "RUNNING" || snapshot.status === "PASS_IN_FLIGHT") {
       this.frameId = requestAnimationFrame((nextTimestamp) => this.tick(nextTimestamp));
     } else {
       this.frameId = null;
@@ -193,7 +216,7 @@ export class TeamSimulatorRenderer {
     });
 
     const primary = snapshot.players.find((player) => player.id === snapshot.primaryReceiverId);
-    const ballDisplayPoint = snapshot.status === "CONTACTED" && primary?.contactPoint
+    const ballDisplayPoint = snapshot.status === "AWAITING_PASS_TARGET_CONFIG" && primary?.contactPoint
       ? primary.contactPoint
       : { x: snapshot.ball.x, y: snapshot.ball.y - snapshot.ball.height };
     this.ball.style.width = `${ballDisplaySize}px`;
@@ -205,11 +228,16 @@ export class TeamSimulatorRenderer {
     this.target.style.top = toTop(snapshot.ball.targetY);
     this.target.hidden = snapshot.status === "READY";
 
-    const resultEvent = snapshot.events.at(-1);
     const statusText = {
       READY: "點擊球場指定發球落點。",
       RUNNING: `主要接球員：${snapshot.primaryReceiverId ?? "分配中"}`,
-      CONTACTED: `${resultEvent?.playerId ?? snapshot.primaryReceiverId} 完成接球。`,
+      AWAITING_PASS_TARGET_CONFIG: "一傳品質已判定，等待黃色／藍色區域座標設定。",
+      PASS_IN_FLIGHT: `第二段一傳飛行中：${snapshot.receiveQuality?.quality ?? "尚未判定"}`,
+      SECOND_TOUCH_COMPLETE: `第二次觸球完成：${snapshot.secondTouchPlayerId}`,
+      SECOND_TOUCH_MISSED: "第二段球已落地，第二次觸球未完成。",
+      PASS_COMPLETE: snapshot.receiveQuality?.quality === "BAD"
+        ? "BAD 一傳已飛出場外，未啟動第二次觸球。"
+        : `第二段一傳完成：${snapshot.receiveQuality?.quality ?? "尚未判定"}`,
       MISSED: "無人於落地前完成接球。",
     }[snapshot.status];
     this.status.textContent = statusText;
@@ -222,6 +250,58 @@ export class TeamSimulatorRenderer {
       `責任 ${snapshot.primaryReceiverId ?? "尚未分配"}`,
       `鏡頭 ${cameraView.mode}`,
     ].join("｜");
+    const quality = snapshot.receiveQuality;
+    const secondPass = snapshot.secondPass;
+    const secondTouchPlayer = snapshot.players.find(
+      (player) => player.id === snapshot.secondTouchPlayerId,
+    );
+    const secondTouchResult = snapshot.secondTouchResult;
+    this.debug.textContent = quality
+      ? [
+        `第一觸球球員：${snapshot.firstTouchPlayerId ?? snapshot.primaryReceiverId ?? "尚未發生"}`,
+        `第二觸球指定球員：${snapshot.secondTouchPlayerId ?? "尚未指定"}`,
+        `提前跑位目標：(${snapshot.secondTouchPrepareTarget.x.toFixed(2)}, ${snapshot.secondTouchPrepareTarget.y.toFixed(2)})`,
+        secondTouchPlayer
+          ? `第二觸球員目前目標：(${secondTouchPlayer.targetX.toFixed(2)}, ${secondTouchPlayer.targetY.toFixed(2)})`
+          : "第二觸球員目前目標：無",
+        `來球品質：${quality.incomingQuality}／${quality.incomingSpeedLevel}（難度 ${quality.incomingDifficulty}）`,
+        `接球能力：${quality.receiveAbility}`,
+        `到位距離：${quality.positionDistance.toFixed(2)}／加分 ${quality.positionBonus.toFixed(2)}`,
+        `準備時間：${quality.preparationTime.toFixed(3)} 秒／加分 ${quality.preparationBonus.toFixed(2)}`,
+        `士氣：${quality.morale}／加成 ${quality.moraleBonus.toFixed(2)}`,
+        `隨機發揮：${quality.randomPerformance.toFixed(2)}`,
+        `最終分數：${quality.score.toFixed(2)}／品質 ${quality.quality}`,
+        snapshot.firstTouchContact
+          ? `RECEIVE 接觸：球心距離 ${snapshot.firstTouchContact.centerDistance.toFixed(2)}／有效頭像半徑 ${snapshot.firstTouchContact.effectiveAvatarRadius.toFixed(2)}／球半徑 ${snapshot.firstTouchContact.ballRadius.toFixed(2)}／重疊 ${snapshot.firstTouchContact.overlapDepth.toFixed(2)}`
+          : "RECEIVE 接觸：尚未發生",
+        secondPass
+          ? `第二段目標：(${secondPass.target.x.toFixed(1)}, ${secondPass.target.y.toFixed(1)})／飛行 ${secondPass.duration.toFixed(2)} 秒`
+          : "第二段目標：等待正式區域座標",
+        secondPass
+          ? `球路調整：+${secondPass.additionalDuration.toFixed(2)} 秒${secondPass.trajectoryAdjustmentLimitReached ? "／已達調整上限仍不可達" : ""}`
+          : "球路調整：尚未建立",
+        snapshot.secondTouchPrediction
+          ? `第二觸球預估：${snapshot.secondTouchPrediction.reachable ? "可達" : "不可達"}，時間 ${snapshot.secondTouchPrediction.interceptTime.toFixed(3)} 秒`
+          : quality.quality === "BAD"
+            ? "第二觸球預估：BAD 不啟動"
+            : "第二觸球預估：尚未建立第二段球路",
+        secondTouchResult
+          ? `第二觸球結果：${secondTouchResult.success ? "成功" : "失敗"}，時間 ${secondTouchResult.time.toFixed(3)} 秒，位置 (${secondTouchResult.ballX.toFixed(1)}, ${secondTouchResult.ballY.toFixed(1)}, 高 ${secondTouchResult.ballHeight.toFixed(1)})`
+          : "第二觸球結果：進行中",
+        secondTouchResult?.success
+          ? `SET 接觸：球心距離 ${secondTouchResult.centerDistance.toFixed(2)}／有效頭像半徑 ${secondTouchResult.effectiveAvatarRadius.toFixed(2)}／球半徑 ${secondTouchResult.ballRadius.toFixed(2)}／重疊 ${secondTouchResult.overlapDepth.toFixed(2)}`
+          : "SET 接觸：尚未成功",
+      ].join("\n")
+      : [
+        `第一觸球球員：${snapshot.firstTouchPlayerId ?? "尚未發生"}`,
+        `第二觸球指定球員：${snapshot.secondTouchPlayerId ?? "尚未指定"}`,
+        `提前跑位目標：(${snapshot.secondTouchPrepareTarget.x.toFixed(2)}, ${snapshot.secondTouchPrepareTarget.y.toFixed(2)})`,
+        secondTouchPlayer
+          ? `第二觸球員目前目標：(${secondTouchPlayer.targetX.toFixed(2)}, ${secondTouchPlayer.targetY.toFixed(2)})`
+          : "第二觸球員目前目標：無",
+        "一傳品質：尚未判定",
+        "第二觸球結果：尚未開始",
+      ].join("\n");
     return true;
   }
 
@@ -248,12 +328,11 @@ export class TeamSimulatorRenderer {
   }
 
   beginCameraFollow(snapshot = this.lastSnapshot) {
-    if (!snapshot || snapshot.status !== "RUNNING"
+    if (!snapshot || !["RUNNING", "PASS_IN_FLIGHT"].includes(snapshot.status)
       || this.camera.mode !== CAMERA_MODES.FOLLOW_BALL) return;
     const rect = this.viewport.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    const remainingFlightTime = snapshot.parameters.flightDuration
-      * Math.max(0, 1 - snapshot.ball.progress);
+    const remainingFlightTime = snapshot.ball.duration * Math.max(0, 1 - snapshot.ball.progress);
     this.camera.beginFollowRoute({
       startX: snapshot.ball.x,
       targetX: snapshot.ball.targetX,

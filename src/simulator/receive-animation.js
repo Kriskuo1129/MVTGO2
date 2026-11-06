@@ -5,11 +5,14 @@ export const RECEIVE_SPEED_LEVELS = Object.freeze({
   SLOW: "SLOW",
 });
 
+export const RECEIVE_MINIMUM_SCALE = 0.78;
+export const ULTRA_FAST_RECEIVE_SCALE = 1;
+
 export const RECEIVE_SPEED_OPTIONS = Object.freeze([
-  Object.freeze({ level: RECEIVE_SPEED_LEVELS.ULTRA_FAST, label: "超快", flightDuration: 0.8, arcHeight: 120, minimumScale: 0.78, animationDurationMs: 900 }),
-  Object.freeze({ level: RECEIVE_SPEED_LEVELS.FAST, label: "快", flightDuration: 1.0, arcHeight: 190, minimumScale: 0.78, animationDurationMs: 420 }),
-  Object.freeze({ level: RECEIVE_SPEED_LEVELS.MEDIUM, label: "中", flightDuration: 1.3, arcHeight: 270, minimumScale: 0.78, animationDurationMs: 350 }),
-  Object.freeze({ level: RECEIVE_SPEED_LEVELS.SLOW, label: "慢", flightDuration: 1.5, arcHeight: 360, minimumScale: 0.78, animationDurationMs: 300 }),
+  Object.freeze({ level: RECEIVE_SPEED_LEVELS.ULTRA_FAST, label: "超快", flightDuration: 0.8, arcHeight: 120, minimumScale: ULTRA_FAST_RECEIVE_SCALE, animationDurationMs: 900 }),
+  Object.freeze({ level: RECEIVE_SPEED_LEVELS.FAST, label: "快", flightDuration: 1.0, arcHeight: 190, minimumScale: RECEIVE_MINIMUM_SCALE, animationDurationMs: 420 }),
+  Object.freeze({ level: RECEIVE_SPEED_LEVELS.MEDIUM, label: "中", flightDuration: 1.3, arcHeight: 270, minimumScale: RECEIVE_MINIMUM_SCALE, animationDurationMs: 350 }),
+  Object.freeze({ level: RECEIVE_SPEED_LEVELS.SLOW, label: "慢", flightDuration: 1.5, arcHeight: 360, minimumScale: RECEIVE_MINIMUM_SCALE, animationDurationMs: 300 }),
 ]);
 
 export const RECEIVE_ANIMATION_CLASS_NAMES = Object.freeze([

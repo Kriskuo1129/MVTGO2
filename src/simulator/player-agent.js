@@ -1,5 +1,6 @@
 import { sampleSimulatorBall } from "./ball.js";
 import {
+  CONTACT_GEOMETRY_TYPES,
   getDirectionalContactOffset,
   getIncomingDirection,
 } from "./contact-detection.js";
@@ -44,43 +45,60 @@ export function predictReachableContact({
   contactAnchorDistance,
   maximumContactHeight,
   sampleStep,
+  contactGeometry = null,
 }) {
   const direction = getIncomingDirection(ball.target.x - ball.start.x);
-  const contactOffset = getDirectionalContactOffset(direction, contactAnchorDistance);
-  let bestEffort = null;
-  for (let elapsed = ball.elapsed; elapsed <= ball.duration + Number.EPSILON; elapsed += sampleStep) {
+  const contactOffset = contactGeometry?.type === CONTACT_GEOMETRY_TYPES.SET
+    ? contactGeometry.offset
+    : getDirectionalContactOffset(
+      direction,
+      contactGeometry?.type === CONTACT_GEOMETRY_TYPES.RECEIVE
+        ? contactGeometry.anchorDistance
+        : contactAnchorDistance,
+    );
+  const targetTolerance = contactGeometry
+    ? Math.min(contactGeometry.horizontalTolerance, contactGeometry.verticalTolerance)
+    : contactRange;
+  let landingCandidate = null;
+  for (let elapsed = ball.duration; elapsed >= ball.elapsed - Number.EPSILON; elapsed -= sampleStep) {
     const sample = sampleSimulatorBall(ball, elapsed);
+    const earlierSample = sampleSimulatorBall(ball, Math.max(ball.elapsed, elapsed - sampleStep));
+    const descending = sample.elapsed >= ball.duration - Number.EPSILON
+      || sample.height < earlierSample.height - Number.EPSILON;
+    if (!descending) continue;
     if (sample.height > maximumContactHeight) continue;
     const availableTime = Math.max(0, sample.elapsed - ball.elapsed);
     const desiredPlayerX = sample.x - contactOffset.x;
     const desiredPlayerY = sample.y - sample.height - contactOffset.y;
     const distance = Math.hypot(desiredPlayerX - player.x, desiredPlayerY - player.y);
-    const requiredTravel = Math.max(0, distance - contactRange);
+    const requiredTravel = Math.max(0, distance - targetTolerance);
     const deficit = requiredTravel - player.moveSpeed * availableTime;
+    const preparationMargin = availableTime - requiredTravel / player.moveSpeed;
+    const prediction = {
+      x: desiredPlayerX,
+      y: desiredPlayerY,
+      interceptTime: sample.elapsed,
+      travelDistance: distance,
+      deficit,
+      preparationMargin,
+      landingTimeDelta: ball.duration - sample.elapsed,
+    };
     if (deficit <= 0) {
-      return Object.freeze({
-        x: desiredPlayerX,
-        y: desiredPlayerY,
-        interceptTime: sample.elapsed,
-        travelDistance: distance,
-        deficit,
-        reachable: true,
-      });
+      return Object.freeze({ ...prediction, reachable: true });
     }
-    if (!bestEffort || deficit < bestEffort.deficit) {
-      bestEffort = {
-        x: desiredPlayerX,
-        y: desiredPlayerY,
-        interceptTime: sample.elapsed,
-        deficit,
-      };
-    }
+    if (!landingCandidate) landingCandidate = prediction;
   }
-  const fallback = bestEffort ?? {
+  const fallback = landingCandidate ?? {
     x: ball.target.x - contactOffset.x,
     y: ball.target.y - contactOffset.y,
     interceptTime: ball.duration,
+    travelDistance: Math.hypot(
+      ball.target.x - contactOffset.x - player.x,
+      ball.target.y - contactOffset.y - player.y,
+    ),
     deficit: Infinity,
+    preparationMargin: -Infinity,
+    landingTimeDelta: 0,
   };
   return Object.freeze({ ...fallback, reachable: false });
 }

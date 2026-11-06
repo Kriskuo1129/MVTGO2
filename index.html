@@ -96,12 +96,59 @@
             </select>
           </label>
           <button id="team-simulator-settings" class="secondary-button" type="button">測試設定</button>
+          <button id="pass-target-zone-edit" class="secondary-button" type="button">編輯一傳區域</button>
           <button id="team-simulator-reset" class="secondary-button" type="button">重設參數</button>
+        </section>
+
+        <section id="pass-target-zone-editor" class="pass-target-zone-editor" aria-labelledby="pass-target-zone-title" hidden>
+          <div class="pass-target-zone-editor__header">
+            <div>
+              <h2 id="pass-target-zone-title">一傳目標區域編輯模式</h2>
+              <p>藍色為 NORMAL 外框；黃色為 PERFECT。NORMAL 實際取樣範圍會扣除黃色區域；初始矩形為正式 V1 座標。</p>
+            </div>
+            <button id="pass-target-zone-close" class="secondary-button" type="button">關閉編輯</button>
+          </div>
+          <div class="pass-target-zone-editor__fields">
+            <fieldset>
+              <legend>NORMAL 藍色外框</legend>
+              <label>minX<input type="number" step="any" data-zone="normalOuter" data-zone-coordinate="minX" /></label>
+              <label>maxX<input type="number" step="any" data-zone="normalOuter" data-zone-coordinate="maxX" /></label>
+              <label>minY<input type="number" step="any" data-zone="normalOuter" data-zone-coordinate="minY" /></label>
+              <label>maxY<input type="number" step="any" data-zone="normalOuter" data-zone-coordinate="maxY" /></label>
+            </fieldset>
+            <fieldset>
+              <legend>PERFECT 黃色區域</legend>
+              <label>minX<input type="number" step="any" data-zone="perfect" data-zone-coordinate="minX" /></label>
+              <label>maxX<input type="number" step="any" data-zone="perfect" data-zone-coordinate="maxX" /></label>
+              <label>minY<input type="number" step="any" data-zone="perfect" data-zone-coordinate="minY" /></label>
+              <label>maxY<input type="number" step="any" data-zone="perfect" data-zone-coordinate="maxY" /></label>
+            </fieldset>
+          </div>
+          <textarea id="pass-target-zone-output" class="pass-target-zone-editor__output" rows="7" readonly aria-label="一傳區域座標 JSON"></textarea>
+          <p id="pass-target-zone-message" class="pass-target-zone-editor__message" role="status" aria-live="polite"></p>
+          <div class="pass-target-zone-editor__actions">
+            <button id="pass-target-zone-copy" class="secondary-button" type="button">複製座標</button>
+            <button id="pass-target-zone-apply" class="primary-button" type="button">套用預覽</button>
+          </div>
         </section>
 
         <div id="team-simulator-viewport" class="simulator-viewport team-simulator-viewport" aria-label="點擊指定六人接球落點">
           <div id="team-simulator-world" class="team-simulator-world">
             <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
+            <div id="pass-target-zone-overlay" class="pass-target-zone-overlay" hidden aria-hidden="true">
+              <div class="pass-target-zone pass-target-zone--normal" data-zone="normalOuter">
+                <span class="pass-target-zone__label">NORMAL</span>
+                <i data-handle="nw"></i><i data-handle="n"></i><i data-handle="ne"></i>
+                <i data-handle="e"></i><i data-handle="se"></i><i data-handle="s"></i>
+                <i data-handle="sw"></i><i data-handle="w"></i>
+              </div>
+              <div class="pass-target-zone pass-target-zone--perfect" data-zone="perfect">
+                <span class="pass-target-zone__label">PERFECT</span>
+                <i data-handle="nw"></i><i data-handle="n"></i><i data-handle="ne"></i>
+                <i data-handle="e"></i><i data-handle="se"></i><i data-handle="s"></i>
+                <i data-handle="sw"></i><i data-handle="w"></i>
+              </div>
+            </div>
             <span id="team-simulator-target" class="simulator-target" hidden aria-hidden="true"></span>
             <span id="team-simulator-ball" class="simulator-ball" hidden aria-label="排球"></span>
           </div>
@@ -110,6 +157,7 @@
         <div class="simulator-output" aria-live="polite">
           <p id="team-simulator-status" data-state="READY">點擊球場指定發球落點。</p>
           <p id="team-simulator-telemetry">球路 HIGH_ARC｜時間 0.00 s｜責任 尚未分配</p>
+          <pre id="team-simulator-debug" class="team-simulator-debug">一傳品質：尚未判定</pre>
         </div>
 
         <dialog id="team-simulator-settings-dialog" class="team-simulator-settings" aria-labelledby="team-simulator-settings-title">

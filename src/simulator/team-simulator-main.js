@@ -4,6 +4,7 @@ import {
 } from "./team-simulator.js";
 import { TeamSimulatorRenderer } from "./team-simulator-renderer.js";
 import { RECEIVE_SPEED_OPTIONS } from "./receive-animation.js";
+import { PassTargetZoneEditor } from "./pass-target-zone-editor.js";
 
 const PARAMETER_FIELDS = Object.freeze({
   avatarSize: "team-simulator-avatar-size",
@@ -70,6 +71,10 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const settingsCancel = root.querySelector("#team-simulator-settings-cancel");
   const settingsApply = root.querySelector("#team-simulator-settings-apply");
   const settingsError = root.querySelector("#team-simulator-settings-error");
+  const zoneEditButton = root.querySelector("#pass-target-zone-edit");
+  const zoneCloseButton = root.querySelector("#pass-target-zone-close");
+  const zoneCopyButton = root.querySelector("#pass-target-zone-copy");
+  const zoneApplyButton = root.querySelector("#pass-target-zone-apply");
   const appearancePlayer = root.querySelector("#team-player-appearance-player");
   const appearanceFile = root.querySelector("#team-player-appearance-file");
   const appearanceSkin = root.querySelector("#team-player-appearance-skin");
@@ -114,6 +119,17 @@ export function createTeamSimulatorApp({ root, onExit }) {
       } catch (error) {
         root.querySelector("#team-simulator-status").textContent = `參數錯誤：${error.message}`;
       }
+    },
+  });
+  let resumeAfterZoneEditing = false;
+  const zoneEditor = new PassTargetZoneEditor({
+    root,
+    renderer,
+    onApply(zones) {
+      simulator.configurePassTargetZones(zones);
+      const snapshot = simulator.getSnapshot();
+      if (snapshot.status === "PASS_IN_FLIGHT") resumeAfterZoneEditing = true;
+      renderer.renderWhenReady(snapshot);
     },
   });
 
@@ -218,6 +234,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   };
 
   const handleReset = () => {
+    if (zoneEditor.active) closeZoneEditor();
     renderer.stop();
     writeParameters(TEAM_SIMULATOR_PARAMETERS);
     simulator.configure(TEAM_SIMULATOR_PARAMETERS);
@@ -225,6 +242,41 @@ export function createTeamSimulatorApp({ root, onExit }) {
     renderer.render(simulator.getSnapshot());
   };
   const handleCameraMode = () => renderer.setCameraMode(cameraMode.value);
+  const openZoneEditor = () => {
+    resumeAfterZoneEditing = ["RUNNING", "PASS_IN_FLIGHT"].includes(simulator.getSnapshot().status);
+    renderer.stop();
+    renderer.setInteractionEnabled(false);
+    zoneEditor.setActive(true);
+    zoneEditButton.setAttribute("aria-pressed", "true");
+    zoneCloseButton.focus({ preventScroll: true });
+  };
+  const closeZoneEditor = () => {
+    zoneEditor.setActive(false);
+    renderer.setInteractionEnabled(true);
+    zoneEditButton.setAttribute("aria-pressed", "false");
+    const snapshot = simulator.getSnapshot();
+    if (resumeAfterZoneEditing && ["RUNNING", "PASS_IN_FLIGHT"].includes(snapshot.status)) {
+      renderer.play(simulator);
+    } else {
+      renderer.renderWhenReady(snapshot);
+    }
+    resumeAfterZoneEditing = false;
+    if (!root.hidden) zoneEditButton.focus({ preventScroll: true });
+  };
+  const handleCopyZones = async () => {
+    try {
+      await zoneEditor.copyCoordinates();
+    } catch (error) {
+      zoneEditor.message.textContent = `複製失敗：${error.message}`;
+    }
+  };
+  const handleApplyZones = () => {
+    try {
+      zoneEditor.applyPreview();
+    } catch (error) {
+      zoneEditor.message.textContent = `套用失敗：${error.message}`;
+    }
+  };
   const closeSettings = () => settingsDialog.close();
   const handleOpenSettings = () => {
     settingsError.textContent = "";
@@ -253,6 +305,10 @@ export function createTeamSimulatorApp({ root, onExit }) {
   resetButton.addEventListener("click", handleReset);
   backButton.addEventListener("click", handleBack);
   cameraMode.addEventListener("change", handleCameraMode);
+  zoneEditButton.addEventListener("click", openZoneEditor);
+  zoneCloseButton.addEventListener("click", closeZoneEditor);
+  zoneCopyButton.addEventListener("click", handleCopyZones);
+  zoneApplyButton.addEventListener("click", handleApplyZones);
   settingsButton.addEventListener("click", handleOpenSettings);
   settingsClose.addEventListener("click", closeSettings);
   settingsCancel.addEventListener("click", closeSettings);
@@ -275,15 +331,25 @@ export function createTeamSimulatorApp({ root, onExit }) {
     },
     hide() {
       renderer.stop();
+      if (zoneEditor.active) {
+        zoneEditor.setActive(false);
+        renderer.setInteractionEnabled(true);
+        resumeAfterZoneEditing = false;
+      }
       if (settingsDialog.open) settingsDialog.close();
       root.hidden = true;
     },
     destroy() {
       photoLoadSequence += 1;
+      zoneEditor.destroy();
       renderer.destroy();
       resetButton.removeEventListener("click", handleReset);
       backButton.removeEventListener("click", handleBack);
       cameraMode.removeEventListener("change", handleCameraMode);
+      zoneEditButton.removeEventListener("click", openZoneEditor);
+      zoneCloseButton.removeEventListener("click", closeZoneEditor);
+      zoneCopyButton.removeEventListener("click", handleCopyZones);
+      zoneApplyButton.removeEventListener("click", handleApplyZones);
       settingsButton.removeEventListener("click", handleOpenSettings);
       settingsClose.removeEventListener("click", closeSettings);
       settingsCancel.removeEventListener("click", closeSettings);

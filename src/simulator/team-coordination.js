@@ -26,7 +26,8 @@ function compareCandidates(left, right) {
     return left.prediction.reachable ? -1 : 1;
   }
   if (left.prediction.reachable) {
-    return left.prediction.interceptTime - right.prediction.interceptTime
+    return left.prediction.landingTimeDelta - right.prediction.landingTimeDelta
+      || right.prediction.preparationMargin - left.prediction.preparationMargin
       || left.prediction.travelDistance - right.prediction.travelDistance;
   }
   return left.prediction.deficit - right.prediction.deficit
@@ -40,6 +41,7 @@ export function assignPrimaryReceiver({
   contactAnchorDistance,
   maximumContactHeight,
   sampleStep,
+  contactGeometry = null,
   isCandidateEligible = () => true,
 }) {
   if (!Array.isArray(players) || players.length === 0) {
@@ -54,6 +56,7 @@ export function assignPrimaryReceiver({
       contactAnchorDistance,
       maximumContactHeight,
       sampleStep,
+      contactGeometry,
     }),
   }));
   if (candidates.length === 0) return null;
