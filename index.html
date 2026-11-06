@@ -62,7 +62,9 @@
           <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
           <span id="simulator-target" class="simulator-target" hidden aria-hidden="true"></span>
           <span id="simulator-player" class="simulator-player" aria-label="追球球員">
-            <span id="simulator-player-avatar" class="simulator-player__avatar">實驗</span>
+            <span id="simulator-player-motion" class="simulator-player__motion">
+              <span id="simulator-player-avatar" class="simulator-player__avatar">實驗</span>
+            </span>
           </span>
           <span id="simulator-ball" class="simulator-ball" hidden aria-label="排球"></span>
         </div>
@@ -116,10 +118,12 @@
             <button id="team-simulator-settings-close" class="dialog-close" type="button" aria-label="關閉測試設定">×</button>
           </div>
           <div class="simulator-parameters" aria-label="六人接球實驗參數">
-            <label>球員顯示尺寸<input id="team-simulator-avatar-size" type="number" min="32" max="160" step="1" /></label>
+            <label>球員顯示尺寸（固定）<input id="team-simulator-avatar-size" type="number" min="130" max="130" step="1" readonly /></label>
             <label>接球移動速度<input id="team-simulator-player-speed" type="number" min="20" max="1600" step="10" /></label>
             <label>有效接球範圍<input id="team-simulator-contact-range" type="number" min="10" max="240" step="1" /></label>
-            <label>球的飛行時間<input id="team-simulator-flight-duration" type="number" min="0.7" max="1.5" step="0.1" /></label>
+            <label>球速
+              <select id="team-simulator-flight-duration"></select>
+            </label>
           </div>
           <section class="team-player-appearance" aria-labelledby="team-player-appearance-title">
             <h3 id="team-player-appearance-title">球員外觀</h3>

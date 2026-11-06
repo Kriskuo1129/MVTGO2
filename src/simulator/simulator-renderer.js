@@ -1,4 +1,9 @@
 import { SIMULATOR_WORLD } from "./simulator.js";
+import {
+  getReceiveAnimationProfile,
+  getReceivePushDirection,
+  RECEIVE_ANIMATION_CLASS_NAMES,
+} from "./receive-animation.js";
 
 export class SimulatorRenderer {
   constructor({ root, onTargetSelected }) {
@@ -9,6 +14,7 @@ export class SimulatorRenderer {
     this.onTargetSelected = onTargetSelected;
     this.viewport = root.querySelector("#simulator-viewport");
     this.player = root.querySelector("#simulator-player");
+    this.motion = root.querySelector("#simulator-player-motion");
     this.avatar = root.querySelector("#simulator-player-avatar");
     this.ball = root.querySelector("#simulator-ball");
     this.target = root.querySelector("#simulator-target");
@@ -72,7 +78,14 @@ export class SimulatorRenderer {
     this.avatar.style.width = `${avatarDisplaySize}px`;
     this.avatar.style.height = `${avatarDisplaySize}px`;
     const isReceiving = snapshot.player.action === "RECEIVE";
+    const animationProfile = getReceiveAnimationProfile(snapshot.parameters.flightDuration);
+    this.player.style.setProperty("--receive-minimum-scale", String(animationProfile.minimumScale));
+    this.player.style.setProperty("--receive-animation-duration", `${animationProfile.animationDurationMs}ms`);
     this.avatar.classList.toggle("is-receiving", isReceiving);
+    this.avatar.classList.remove(...RECEIVE_ANIMATION_CLASS_NAMES);
+    if (isReceiving) {
+      this.avatar.classList.add(animationProfile.className);
+    }
     this.avatar.classList.toggle(
       "receive-from-left",
       isReceiving && snapshot.player.receiveDirection === "FROM_LEFT",
@@ -81,6 +94,20 @@ export class SimulatorRenderer {
       "receive-from-right",
       isReceiving && snapshot.player.receiveDirection === "FROM_RIGHT",
     );
+    const isUltraFastReceive = isReceiving && animationProfile.level === "ULTRA_FAST";
+    const pushDirection = isReceiving
+      ? getReceivePushDirection(snapshot.player.receiveDirection)
+      : 1;
+    const availableWorldDistance = pushDirection > 0
+      ? snapshot.world.width - snapshot.player.x
+      : snapshot.player.x;
+    const rollWorldDistance = Math.min(snapshot.parameters.avatarSize, availableWorldDistance);
+    this.player.style.setProperty(
+      "--receive-roll-distance",
+      `${pushDirection * rollWorldDistance * courtScale}px`,
+    );
+    this.player.style.setProperty("--receive-roll-rotation", `${pushDirection * 360}deg`);
+    this.motion.classList.toggle("is-ultra-fast-receiving", isUltraFastReceive);
     this.ball.style.width = `${ballDisplaySize}px`;
     this.ball.style.height = `${ballDisplaySize}px`;
     const ballDisplayPoint = snapshot.status === "CONTACTED" && snapshot.player.contactPoint

@@ -17,12 +17,10 @@ import {
 } from "./player-agent.js";
 import {
   DEFAULT_SIMULATOR_PARAMETERS,
-  SIMULATOR_BALL_DISPLAY_SIZE,
   SIMULATOR_BALL_OVERLAP_RATIO,
   SIMULATOR_BALL_START,
   SIMULATOR_CONTACT_ANCHOR_DISTANCE,
   SIMULATOR_FIXED_STEP,
-  SIMULATOR_HIGH_ARC_HEIGHT,
   SIMULATOR_MAX_FRAME_DELTA,
   SIMULATOR_MAXIMUM_CONTACT_HEIGHT,
   SIMULATOR_WORLD,
@@ -40,6 +38,7 @@ import {
   recordEligibleTouch,
   TOUCH_PHASES,
 } from "./touch-eligibility.js";
+import { getReceiveSpeedProfile } from "./receive-animation.js";
 
 export const TEAM_RECEIVE_FORMATION = Object.freeze([
   Object.freeze({ id: "SIM-P1", position: PLAYER_POSITIONS.S, rotationPosition: "POS1", x: 1880, y: 700 }),
@@ -49,6 +48,14 @@ export const TEAM_RECEIVE_FORMATION = Object.freeze([
   Object.freeze({ id: "SIM-P5", position: PLAYER_POSITIONS.OH2, rotationPosition: "POS5", x: 1880, y: 300 }),
   Object.freeze({ id: "SIM-P6", position: PLAYER_POSITIONS.MB2, rotationPosition: "POS6", x: 1740, y: 500 }),
 ]);
+
+export const TEAM_SIMULATOR_AVATAR_SIZE = 130;
+export const TEAM_SIMULATOR_BALL_DISPLAY_SIZE = 50;
+export const TEAM_SIMULATOR_PARAMETERS = Object.freeze({
+  ...DEFAULT_SIMULATOR_PARAMETERS,
+  avatarSize: TEAM_SIMULATOR_AVATAR_SIZE,
+  flightDuration: 1.5,
+});
 
 function assertTargetCoordinate(value, maximum, fieldName) {
   if (!Number.isFinite(value) || value < 0 || value > maximum) {
@@ -65,7 +72,7 @@ function createTeamPlayers(parameters) {
 }
 
 export class SixPlayerReceiveSimulator {
-  constructor({ parameters = DEFAULT_SIMULATOR_PARAMETERS, fixedStep = SIMULATOR_FIXED_STEP } = {}) {
+  constructor({ parameters = TEAM_SIMULATOR_PARAMETERS, fixedStep = SIMULATOR_FIXED_STEP } = {}) {
     if (!Number.isFinite(fixedStep) || fixedStep < 1 / 1000 || fixedStep > 0.1) {
       throw new RangeError("固定時間步進必須介於 0.001～0.1。");
     }
@@ -95,11 +102,12 @@ export class SixPlayerReceiveSimulator {
     const targetX = assertTargetCoordinate(target.x, SIMULATOR_WORLD.width, "落點 X");
     const targetY = assertTargetCoordinate(target.y, SIMULATOR_WORLD.height, "落點 Y");
     this.reset();
+    const speedProfile = getReceiveSpeedProfile(this.parameters.flightDuration);
     launchSimulatorBall(this.ball, {
       start: SIMULATOR_BALL_START,
       target: { x: targetX, y: targetY },
       duration: this.parameters.flightDuration,
-      arcHeight: SIMULATOR_HIGH_ARC_HEIGHT,
+      arcHeight: speedProfile.arcHeight,
       trajectoryType: BALL_TRAJECTORY_TYPES.HIGH_ARC,
     });
     const receiveCandidateIds = this.players
@@ -242,7 +250,7 @@ export class SixPlayerReceiveSimulator {
         player: contactingPlayer,
         direction: contact.direction,
         avatarSize: this.parameters.avatarSize,
-        ballSize: SIMULATOR_BALL_DISPLAY_SIZE,
+        ballSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
         overlapRatio: SIMULATOR_BALL_OVERLAP_RATIO,
       });
       const contactTime = this.simulationTime
@@ -294,6 +302,8 @@ export class SixPlayerReceiveSimulator {
         progress: this.ball.progress,
         inFlight: this.ball.inFlight,
         trajectoryType: this.ball.trajectoryType,
+        arcHeight: this.ball.arcHeight,
+        speedLevel: getReceiveSpeedProfile(this.parameters.flightDuration).level,
         targetX: this.ball.target.x,
         targetY: this.ball.target.y,
       }),
@@ -315,7 +325,7 @@ export class SixPlayerReceiveSimulator {
       }))),
       events: Object.freeze([...this.events]),
       presentation: Object.freeze({
-        ballDisplaySize: SIMULATOR_BALL_DISPLAY_SIZE,
+        ballDisplaySize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
         ballOverlapRatio: SIMULATOR_BALL_OVERLAP_RATIO,
       }),
     });

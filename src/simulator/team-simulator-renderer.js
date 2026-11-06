@@ -3,6 +3,11 @@ import {
   CAMERA_MODES,
   SimulatorCameraController,
 } from "./camera-controller.js";
+import {
+  getReceiveAnimationProfile,
+  getReceivePushDirection,
+  RECEIVE_ANIMATION_CLASS_NAMES,
+} from "./receive-animation.js";
 
 export class TeamSimulatorRenderer {
   constructor({ root, onTargetSelected }) {
@@ -53,6 +58,8 @@ export class TeamSimulatorRenderer {
     wrapper.dataset.playerId = player.id;
     const avatar = document.createElement("span");
     avatar.className = "simulator-player__avatar";
+    const motion = document.createElement("span");
+    motion.className = "simulator-player__motion";
     const fallback = document.createElement("span");
     fallback.className = "simulator-player__fallback";
     fallback.textContent = player.position;
@@ -65,9 +72,10 @@ export class TeamSimulatorRenderer {
       fallback.hidden = false;
     });
     avatar.append(fallback, image);
-    wrapper.append(avatar);
+    motion.append(avatar);
+    wrapper.append(motion);
     this.world.append(wrapper);
-    const elements = Object.freeze({ wrapper, avatar, fallback, image });
+    const elements = Object.freeze({ wrapper, motion, avatar, fallback, image });
     this.playerElements.set(player.id, elements);
     this.applyPlayerAppearance(player.id, elements);
     return elements;
@@ -151,7 +159,7 @@ export class TeamSimulatorRenderer {
     const ballDisplaySize = snapshot.presentation.ballDisplaySize * cameraView.displayScale;
 
     snapshot.players.forEach((player) => {
-      const { wrapper, avatar } = this.ensurePlayerElement(player);
+      const { wrapper, motion, avatar } = this.ensurePlayerElement(player);
       wrapper.style.left = toLeft(player.x);
       wrapper.style.top = toTop(player.y);
       wrapper.classList.toggle("is-primary-receiver", player.responsibility === "PRIMARY");
@@ -161,9 +169,27 @@ export class TeamSimulatorRenderer {
       avatar.style.width = `${avatarDisplaySize}px`;
       avatar.style.height = `${avatarDisplaySize}px`;
       const isReceiving = player.action === "RECEIVE";
+      const animationProfile = getReceiveAnimationProfile(snapshot.parameters.flightDuration);
+      wrapper.style.setProperty("--receive-minimum-scale", String(animationProfile.minimumScale));
+      wrapper.style.setProperty("--receive-animation-duration", `${animationProfile.animationDurationMs}ms`);
       avatar.classList.toggle("is-receiving", isReceiving);
+      avatar.classList.remove(...RECEIVE_ANIMATION_CLASS_NAMES);
+      if (isReceiving) {
+        avatar.classList.add(animationProfile.className);
+      }
       avatar.classList.toggle("receive-from-left", isReceiving && player.receiveDirection === "FROM_LEFT");
       avatar.classList.toggle("receive-from-right", isReceiving && player.receiveDirection === "FROM_RIGHT");
+      const isUltraFastReceive = isReceiving && animationProfile.level === "ULTRA_FAST";
+      const pushDirection = isReceiving
+        ? getReceivePushDirection(player.receiveDirection)
+        : 1;
+      const availableWorldDistance = pushDirection > 0
+        ? snapshot.world.width - player.x
+        : player.x;
+      const rollWorldDistance = Math.min(snapshot.parameters.avatarSize, availableWorldDistance);
+      motion.style.setProperty("--receive-roll-distance", `${pushDirection * rollWorldDistance * cameraView.displayScale}px`);
+      motion.style.setProperty("--receive-roll-rotation", `${pushDirection * 360}deg`);
+      motion.classList.toggle("is-ultra-fast-receiving", isUltraFastReceive);
     });
 
     const primary = snapshot.players.find((player) => player.id === snapshot.primaryReceiverId);
@@ -190,6 +216,7 @@ export class TeamSimulatorRenderer {
     this.status.dataset.state = snapshot.status;
     this.telemetry.textContent = [
       `球路 ${snapshot.ball.trajectoryType}`,
+      `弧度 ${snapshot.ball.arcHeight}`,
       `時間 ${snapshot.simulationTime.toFixed(2)} s`,
       `球 (${snapshot.ball.x.toFixed(0)}, ${snapshot.ball.y.toFixed(0)}, 高 ${snapshot.ball.height.toFixed(0)})`,
       `責任 ${snapshot.primaryReceiverId ?? "尚未分配"}`,

@@ -1,8 +1,9 @@
 import {
-  DEFAULT_SIMULATOR_PARAMETERS,
-} from "./simulator.js";
-import { SixPlayerReceiveSimulator } from "./team-simulator.js";
+  SixPlayerReceiveSimulator,
+  TEAM_SIMULATOR_PARAMETERS,
+} from "./team-simulator.js";
 import { TeamSimulatorRenderer } from "./team-simulator-renderer.js";
+import { RECEIVE_SPEED_OPTIONS } from "./receive-animation.js";
 
 const PARAMETER_FIELDS = Object.freeze({
   avatarSize: "team-simulator-avatar-size",
@@ -84,6 +85,9 @@ export function createTeamSimulatorApp({ root, onExit }) {
   appearancePreviewImage.addEventListener("error", () => {
     appearancePreviewImage.hidden = true;
     appearancePreviewFallback.hidden = false;
+  });
+  RECEIVE_SPEED_OPTIONS.forEach(({ label, flightDuration }) => {
+    fields.flightDuration.add(new Option(`${label}（${flightDuration.toFixed(1)} 秒）`, String(flightDuration)));
   });
 
   function readParameters() {
@@ -215,8 +219,8 @@ export function createTeamSimulatorApp({ root, onExit }) {
 
   const handleReset = () => {
     renderer.stop();
-    writeParameters(DEFAULT_SIMULATOR_PARAMETERS);
-    simulator.configure(DEFAULT_SIMULATOR_PARAMETERS);
+    writeParameters(TEAM_SIMULATOR_PARAMETERS);
+    simulator.configure(TEAM_SIMULATOR_PARAMETERS);
     renderer.resetCamera(simulator.getSnapshot());
     renderer.render(simulator.getSnapshot());
   };
@@ -260,7 +264,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
     control.addEventListener("input", handleAppearanceAdjustment);
   });
   appearanceRemove.addEventListener("click", handleRemovePhoto);
-  writeParameters(DEFAULT_SIMULATOR_PARAMETERS);
+  writeParameters(TEAM_SIMULATOR_PARAMETERS);
   renderAppearanceEditor();
 
   return Object.freeze({
