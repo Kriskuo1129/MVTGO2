@@ -38,7 +38,7 @@ export function launchSimulatorBall(ball, {
     y: start.y,
     height: start.height,
     start: Object.freeze({ ...start }),
-    target: Object.freeze({ x: target.x, y: target.y, height: 0 }),
+    target: Object.freeze({ x: target.x, y: target.y, height: target.height ?? 0 }),
     duration,
     elapsed: 0,
     progress: 0,
@@ -60,7 +60,7 @@ export function stepSimulatorBall(ball, deltaSeconds) {
   if (ball.progress >= 1) {
     ball.inFlight = false;
     ball.landed = true;
-    ball.height = 0;
+    ball.height = ball.target.height;
   }
 }
 

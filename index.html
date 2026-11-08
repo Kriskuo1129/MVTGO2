@@ -97,6 +97,7 @@
           </label>
           <button id="team-simulator-settings" class="secondary-button" type="button">測試設定</button>
           <button id="pass-target-zone-edit" class="secondary-button" type="button">編輯一傳區域</button>
+          <button id="attack-position-edit" class="secondary-button" type="button" aria-pressed="false">編輯進攻站位</button>
           <button id="team-simulator-reset" class="secondary-button" type="button">重設參數</button>
         </section>
 
@@ -132,6 +133,91 @@
           </div>
         </section>
 
+        <section class="left-long-experiment" aria-labelledby="left-long-title">
+          <h2 id="left-long-title">四號位長攻跑位實驗</h2>
+          <div class="attack-position-selectors">
+            <label class="left-long-toggle"><input id="left-long-enabled" type="checkbox" />啟用 LEFT_LONG 跑位實驗</label>
+            <label>查詢輪次<select id="left-long-rotation"></select></label>
+            <label>長攻負責球員<select id="left-long-player"></select></label>
+            <label>第三段飛行時間（秒）<input id="third-pass-duration" type="number" min="0.1" max="10" step="0.1" /></label>
+            <label>第三段額外弧度（世界像素）<input id="third-pass-arc" type="number" min="160" max="1000" step="10" /></label>
+            <label>相對跳躍頭像的接觸高度（世界像素）<input id="third-pass-contact-height" type="number" min="160" max="400" step="10" /></label>
+          </div>
+          <p>已載入使用者確認的 R1／OH1／LEFT_LONG 正式站位；其餘 179 組未設定。其他組合需在「編輯進攻站位」設定並套用預覽。啟用後，真實 SECOND_TOUCH 會同時啟動第三段球路與 ATTACK 跑位；S 不支援。未勾選時維持原六人實驗。</p>
+          <p>球路參數為暫時測試預設，尚未正式定案。時間是直到自然落地的總秒數；弧度是線性高度基線上額外高度，並非精確最高高度。弧度需至少等於相對接觸高度加跳躍最高高度。參數於下一次發球套用，不自動延長球路等待攻擊手。</p>
+          <p id="left-long-source">UNCONFIGURED</p>
+          <div class="attack-position-selectors" aria-label="攻擊動畫 V1 測試參數">
+            <label>攻擊方向<select id="attack-motion-direction"><option value="LEFT">向左</option><option value="RIGHT">向右（鏡像實驗）</option></select></label>
+            <label>最高跳躍高度（世界像素）<input id="attack-motion-height" type="number" min="0" max="180" step="5" /></label>
+            <label>跳躍總時間（秒）<input id="attack-motion-duration" type="number" min="0.3" max="3" step="0.05" /></label>
+            <label>起跳階段（秒）<input id="attack-motion-takeoff" type="number" min="0.02" step="0.01" /></label>
+            <label>拉弓階段（秒）<input id="attack-motion-draw" type="number" min="0.02" step="0.01" /></label>
+            <label>揮擊階段（秒）<input id="attack-motion-swing" type="number" min="0.02" step="0.01" /></label>
+          </div>
+          <p>D2 預設採用使用者確認的 V1 動畫：60 世界像素、0.8 秒，並保留手動調整。實際抵達 ATTACK 後依一次性預測起跳；接觸高度相對於跳躍後頭像，球路只在第三段開始時規劃一次。揮擊接近 ±30° 仍須真實碰撞，成功或揮空後都會完成旋轉落地。</p>
+          <p id="left-long-message" role="status" aria-live="polite"></p>
+          <fieldset class="spike-controls">
+            <legend>D2 指定落點扣球</legend>
+            <label><input id="spike-enabled" type="checkbox" checked />啟用 D2（需先啟用 LEFT_LONG）</label>
+            <div class="attack-position-selectors">
+              <label>球場點擊模式<select id="spike-click-mode">
+                <option value="SERVE">設定發球落點（啟動 Rally）</option>
+                <option value="SPIKE_TARGET">設定扣球落點（不發球）</option>
+              </select></label>
+              <label>扣球落點 X<input id="spike-target-x" type="number" min="0" max="1140" step="any" /></label>
+              <label>扣球落點 Y<input id="spike-target-y" type="number" min="0" max="900" step="any" /></label>
+              <label>扣球時間（秒）<input id="spike-duration" type="number" min="0.05" max="3" step="0.05" /></label>
+              <label>弧度／下墜（世界像素）<input id="spike-arc" type="number" min="-200" max="300" step="5" /></label>
+              <label>球網高度 V1（暫定）<input id="spike-net-height" type="number" min="0" max="400" step="5" /></label>
+            </div>
+            <button id="spike-target-clear" class="secondary-button" type="button">清除扣球落點</button>
+            <p>先選「設定扣球落點」並點左半場，可重選；再切回「設定發球落點」點球場開始。發球後鎖定本 Rally 目標，直到完成或重設。青色小點是地面目標，第四段僅在真實 THIRD_TOUCH 後開始。</p>
+            <p id="spike-court-description">細虛線為暫定 V1 場界，並非背景圖片線條的物理校準；球網高度與扣球球路參數皆為暫時實驗設定。</p>
+            <pre id="spike-debug" class="team-simulator-debug">扣球落點：UNCONFIGURED</pre>
+          </fieldset>
+          <pre id="left-long-debug" class="team-simulator-debug">進攻任務：未啟用｜IDLE</pre>
+        </section>
+
+        <section id="attack-position-editor" class="pass-target-zone-editor" aria-labelledby="attack-position-title" hidden>
+          <div class="pass-target-zone-editor__header">
+            <div><h2 id="attack-position-title">進攻站位編輯</h2>
+              <p>世界像素：X 1140～2280、Y 0～900。綠色 ● READY／粉色 ◆ ATTACK。空白為 UNCONFIGURED，請輸入兩軸或選擇點位後點擊球場，再拖曳微調。</p>
+              <p>僅編輯資料，不判定前後排資格、不移動球員；資料只保留於本次頁面，離開或重新整理前請匯出 JSON。</p></div>
+            <button id="attack-position-close" class="secondary-button" type="button">關閉編輯</button>
+          </div>
+          <div class="attack-position-selectors">
+            <label>輪次<select data-attack-select="rotation"></select></label>
+            <label>固定球員槽位<select data-attack-select="playerSlot"></select></label>
+            <label>進攻類型<select data-attack-select="attackType"></select></label>
+          </div>
+          <div class="pass-target-zone-editor__fields">
+            <fieldset><legend>● READY 準備位置</legend>
+              <label>X<input type="number" step="any" data-attack-point="readyPosition" data-attack-coordinate="x" /></label>
+              <label>Y<input type="number" step="any" data-attack-point="readyPosition" data-attack-coordinate="y" /></label>
+              <button class="secondary-button" type="button" data-attack-place="readyPosition">在球場設定 READY</button>
+            </fieldset>
+            <fieldset><legend>◆ ATTACK 進攻位置</legend>
+              <label>X<input type="number" step="any" data-attack-point="attackPosition" data-attack-coordinate="x" /></label>
+              <label>Y<input type="number" step="any" data-attack-point="attackPosition" data-attack-coordinate="y" /></label>
+              <button class="secondary-button" type="button" data-attack-place="attackPosition">在球場設定 ATTACK</button>
+            </fieldset>
+          </div>
+          <p id="attack-position-summary" role="status"></p>
+          <pre id="attack-position-current" class="team-simulator-debug" aria-label="目前站位設定"></pre>
+          <label>全部站位 JSON（匯入會取代草稿；缺少的組合仍未設定）
+            <textarea id="attack-position-output" class="pass-target-zone-editor__output" rows="8" spellcheck="false"></textarea>
+          </label>
+          <p id="attack-position-message" class="pass-target-zone-editor__message" role="status" aria-live="polite"></p>
+          <div class="pass-target-zone-editor__actions">
+            <button id="attack-position-export" class="secondary-button" type="button">匯出全部 JSON</button>
+            <button id="attack-position-copy" class="secondary-button" type="button">複製 JSON</button>
+            <button id="attack-position-import" class="secondary-button" type="button">驗證並匯入 JSON</button>
+            <button id="attack-position-clear" class="secondary-button" type="button">清除目前組合</button>
+            <button id="attack-position-reset" class="secondary-button" type="button">重設未套用修改</button>
+            <button id="attack-position-apply" class="primary-button" type="button">套用預覽</button>
+          </div>
+        </section>
+
         <div id="team-simulator-viewport" class="simulator-viewport team-simulator-viewport" aria-label="點擊指定六人接球落點">
           <div id="team-simulator-world" class="team-simulator-world">
             <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
@@ -148,6 +234,18 @@
                 <i data-handle="e"></i><i data-handle="se"></i><i data-handle="s"></i>
                 <i data-handle="sw"></i><i data-handle="w"></i>
               </div>
+            </div>
+            <div id="spike-target-overlay" class="spike-target-overlay" hidden aria-hidden="true">
+              <span id="spike-court-outline" class="spike-court-outline"></span>
+              <span id="spike-target-marker" class="spike-target-marker" hidden></span>
+            </div>
+            <div id="left-long-targets" class="left-long-targets" hidden aria-hidden="true">
+              <span class="left-long-dot left-long-dot--ready" data-left-long-target="readyPosition"></span>
+              <span class="left-long-dot left-long-dot--attack" data-left-long-target="attackPosition"></span>
+            </div>
+            <div id="attack-position-overlay" class="attack-position-overlay" hidden>
+              <span class="attack-position-marker attack-position-marker--ready" data-attack-marker="readyPosition" hidden></span>
+              <span class="attack-position-marker attack-position-marker--attack" data-attack-marker="attackPosition" hidden></span>
             </div>
             <span id="team-simulator-target" class="simulator-target" hidden aria-hidden="true"></span>
             <span id="team-simulator-ball" class="simulator-ball" hidden aria-label="排球"></span>

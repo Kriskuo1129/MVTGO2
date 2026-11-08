@@ -1,10 +1,17 @@
 import {
-  SixPlayerReceiveSimulator,
   TEAM_SIMULATOR_PARAMETERS,
 } from "./team-simulator.js";
 import { TeamSimulatorRenderer } from "./team-simulator-renderer.js";
 import { RECEIVE_SPEED_OPTIONS } from "./receive-animation.js";
 import { PassTargetZoneEditor } from "./pass-target-zone-editor.js";
+import { AttackPositionEditor } from "./attack-position-editor.js";
+import { ATTACK_ROTATIONS } from "./attack-positions.js";
+import { resolveLeftLongConfiguration } from "./attack-assignment.js";
+import { SpikeReceiveSimulator, D2_ATTACK_MOTION_V1 } from "./spike-simulator.js";
+import { isSpikeExperimentRunning as isReceiveExperimentRunning } from "./spike-flight.js";
+import { SPIKE_COURT_V1, SPIKE_TEST_DEFAULTS, validateSpikeTarget, validateSpikeParameters } from "./spike-court.js";
+import { THIRD_PASS_TEST_DEFAULTS, validateThirdPassParameters } from "./third-pass.js";
+import { validateAttackMotionParameters } from "./attack-motion.js";
 
 const PARAMETER_FIELDS = Object.freeze({
   avatarSize: "team-simulator-avatar-size",
@@ -58,7 +65,42 @@ async function verifyBrowserCanDecodePhoto(photoUrl) {
 }
 
 export function createTeamSimulatorApp({ root, onExit }) {
-  const simulator = new SixPlayerReceiveSimulator();
+  const simulator = new SpikeReceiveSimulator();
+  const attackEnabled = root.querySelector("#left-long-enabled");
+  const attackRotation = root.querySelector("#left-long-rotation");
+  const attackPlayer = root.querySelector("#left-long-player");
+  const attackSource = root.querySelector("#left-long-source");
+  const attackMessage = root.querySelector("#left-long-message");
+  const spikeEnabled = root.querySelector("#spike-enabled");
+  const spikeClickMode = root.querySelector("#spike-click-mode");
+  const spikeClear = root.querySelector("#spike-target-clear");
+  const spikeTargetX = root.querySelector("#spike-target-x");
+  const spikeTargetY = root.querySelector("#spike-target-y");
+  let selectedSpikeTarget = null;
+  const spikeFields = { flightDuration: root.querySelector("#spike-duration"),
+    arcHeight: root.querySelector("#spike-arc"), netHeight: root.querySelector("#spike-net-height") };
+  Object.entries(spikeFields).forEach(([key, input]) => { input.value = String(SPIKE_TEST_DEFAULTS[key]); });
+  const spikeBounds = SPIKE_COURT_V1.bounds;
+  root.querySelector("#spike-court-description").textContent = `細虛線為暫定 V1 有效場界：X ${spikeBounds.minX}～${spikeBounds.maxX}、Y ${spikeBounds.minY}～${spikeBounds.maxY}；不是背景圖片線條的物理校準。對方半場以球網 X=${SPIKE_COURT_V1.netX} 截斷。可指定左半場場外點，結果依幾何判定 OUT。`;
+  spikeTargetX.max = String(SPIKE_COURT_V1.netX);
+  spikeTargetY.max = String(SPIKE_COURT_V1.world.height);
+  const thirdPassFields = {
+    flightDuration: root.querySelector("#third-pass-duration"),
+    arcHeight: root.querySelector("#third-pass-arc"),
+    contactHeight: root.querySelector("#third-pass-contact-height"),
+  };
+  Object.entries(thirdPassFields).forEach(([key, input]) => { input.value = String(THIRD_PASS_TEST_DEFAULTS[key]); });
+  const motionFields = {
+    maximumHeight: root.querySelector("#attack-motion-height"),
+    jumpDuration: root.querySelector("#attack-motion-duration"),
+    takeoffDuration: root.querySelector("#attack-motion-takeoff"),
+    drawDuration: root.querySelector("#attack-motion-draw"),
+    swingDuration: root.querySelector("#attack-motion-swing"),
+  };
+  const motionDirection = root.querySelector("#attack-motion-direction");
+  Object.entries(motionFields).forEach(([key, input]) => { input.value = String(D2_ATTACK_MOTION_V1[key]); });
+  motionDirection.value = D2_ATTACK_MOTION_V1.direction;
+  ATTACK_ROTATIONS.forEach((rotation) => attackRotation.add(new Option(rotation, rotation)));
   const fields = Object.fromEntries(
     Object.entries(PARAMETER_FIELDS).map(([key, id]) => [key, root.querySelector(`#${id}`)]),
   );
@@ -72,6 +114,8 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const settingsApply = root.querySelector("#team-simulator-settings-apply");
   const settingsError = root.querySelector("#team-simulator-settings-error");
   const zoneEditButton = root.querySelector("#pass-target-zone-edit");
+  const attackEditButton = root.querySelector("#attack-position-edit");
+  const attackCloseButton = root.querySelector("#attack-position-close");
   const zoneCloseButton = root.querySelector("#pass-target-zone-close");
   const zoneCopyButton = root.querySelector("#pass-target-zone-copy");
   const zoneApplyButton = root.querySelector("#pass-target-zone-apply");
@@ -111,12 +155,47 @@ export function createTeamSimulatorApp({ root, onExit }) {
     root,
     onTargetSelected(target) {
       try {
+        if (simulator.lockedSpikeTarget && isReceiveExperimentRunning(simulator.status)) {
+          throw new Error("本 Rally 進行中，扣球落點已鎖定；請等待完成或重設。");
+        }
+        if (spikeClickMode.value === "SPIKE_TARGET") {
+          if (!spikeEnabled.checked) throw new Error("請啟用 D2 設定扣球落點，或切回「設定發球落點」。");
+          selectedSpikeTarget = validateSpikeTarget(target);
+          refreshSpikeTarget();
+          attackMessage.textContent = "扣球目標已設定。請切換「設定發球落點」後點球場啟動 Rally。";
+          return;
+        }
+        const attackConfiguration = readAttackConfiguration();
+        if (attackConfiguration && spikeEnabled.checked && !selectedSpikeTarget) throw new Error("UNCONFIGURED：尚未設定扣球落點，請先使用「設定扣球落點」模式點選左半場。");
+        if (attackConfiguration && spikeEnabled.checked) {
+          const typed = validateSpikeTarget({ x: spikeTargetX.value.trim() === "" ? NaN : Number(spikeTargetX.value),
+            y: spikeTargetY.value.trim() === "" ? NaN : Number(spikeTargetY.value) });
+          if (typed.x !== selectedSpikeTarget.x || typed.y !== selectedSpikeTarget.y) throw new Error("扣球落點欄位尚未完成有效設定，請確認 X／Y。");
+        }
+        const spikeConfiguration = attackConfiguration && spikeEnabled.checked ? { target: validateSpikeTarget(selectedSpikeTarget),
+          parameters: validateSpikeParameters(Object.fromEntries(Object.entries(spikeFields).map(([key, input]) => [key, input.value.trim() === "" ? NaN : Number(input.value)]))) } : null;
+        const thirdParameters = attackConfiguration
+          ? validateThirdPassParameters(Object.fromEntries(Object.entries(thirdPassFields).map(([key, input]) => [key, input.value.trim() === "" ? NaN : Number(input.value)]))) : null;
+        const motionParameters = attackConfiguration ? validateAttackMotionParameters({
+          ...Object.fromEntries(Object.entries(motionFields).map(([key, input]) => [key, input.value.trim() === "" ? NaN : Number(input.value)])),
+          direction: motionDirection.value,
+        }) : null;
+        if (thirdParameters && thirdParameters.arcHeight < thirdParameters.contactHeight + motionParameters.maximumHeight) {
+          throw new RangeError("第三段弧度需至少等於接觸高度加上最高跳躍高度，請調整測試參數。");
+        }
+        if (spikeConfiguration && motionParameters.direction !== "LEFT") throw new Error("D2 僅支援向左扣球；向右動畫鏡像請關閉 D2。");
         renderer.stop();
-        if (simulator.getSnapshot().status === "RUNNING") simulator.reset();
+        if (isReceiveExperimentRunning(simulator.getSnapshot().status)) simulator.reset();
         simulator.configure(readParameters());
+        simulator.configureAttackAssignment(attackConfiguration);
+        if (thirdParameters) simulator.configureThirdPass(thirdParameters);
+        if (motionParameters) simulator.configureAttackMotion(motionParameters);
+        simulator.configureSpikeExperiment(spikeConfiguration);
         simulator.launch(target);
+        attackMessage.textContent = "";
         renderer.play(simulator);
       } catch (error) {
+        attackMessage.textContent = error.message;
         root.querySelector("#team-simulator-status").textContent = `參數錯誤：${error.message}`;
       }
     },
@@ -132,8 +211,60 @@ export function createTeamSimulatorApp({ root, onExit }) {
       renderer.renderWhenReady(snapshot);
     },
   });
+  const attackEditor = new AttackPositionEditor({ root, renderer, onPreviewChange: () => refreshAttackConfiguration() });
+  let resumeAfterAttackEditing = false;
+
+  function refreshSpikeTarget() {
+    if (!spikeEnabled.checked) spikeClickMode.value = "SERVE";
+    spikeTargetX.value = selectedSpikeTarget ? String(selectedSpikeTarget.x) : "";
+    spikeTargetY.value = selectedSpikeTarget ? String(selectedSpikeTarget.y) : "";
+    renderer.setSpikePreview(spikeEnabled.checked && (attackEnabled.checked || spikeClickMode.value === "SPIKE_TARGET")
+      ? { target: selectedSpikeTarget, court: SPIKE_COURT_V1 } : null);
+  }
+  const handleSpikeCoordinates = () => {
+    try {
+      if (isReceiveExperimentRunning(simulator.status)) throw new Error("發球後扣球目標已鎖定。");
+      if (!spikeTargetX.value.trim() || !spikeTargetY.value.trim()) throw new Error("扣球落點 X／Y 都需要輸入數值。");
+      selectedSpikeTarget = validateSpikeTarget({ x: Number(spikeTargetX.value), y: Number(spikeTargetY.value) });
+      refreshSpikeTarget(); attackMessage.textContent = "扣球落點已更新。";
+    } catch (error) { attackMessage.textContent = error.message; }
+  };
+  const clearSpikeTarget = () => {
+    if (isReceiveExperimentRunning(simulator.status)) return;
+    selectedSpikeTarget = null; refreshSpikeTarget();
+  };
 
   const players = simulator.getSnapshot().players;
+  players.forEach((player) => {
+    const option = new Option(`${player.position}（${player.id}）${player.position === "S" ? "：本階段不支援" : ""}`, player.id);
+    option.disabled = player.position === "S";
+    attackPlayer.add(option);
+  });
+  attackPlayer.value = players.find((player) => player.position !== "S").id;
+
+  function readAttackConfiguration() {
+    if (!attackEnabled.checked) return null;
+    return resolveLeftLongConfiguration(attackEditor.preview, attackRotation.value,
+      attackPlayer.value, simulator.getSnapshot().players, simulator.secondTouchPlayerId);
+  }
+
+  function refreshAttackConfiguration() {
+    try {
+      const configuration = readAttackConfiguration();
+      const source = configuration?.source;
+      attackSource.textContent = source
+        ? `來源：C1 已套用預覽／${source.rotation}／${source.playerSlot}／LEFT_LONG｜READY (${configuration.readyPosition.x}, ${configuration.readyPosition.y}) → ATTACK (${configuration.attackPosition.x}, ${configuration.attackPosition.y})`
+        : "跑位實驗未啟用；一般六人接發球模式。";
+      attackMessage.textContent = "";
+      renderer.setAttackPreview(configuration);
+      refreshSpikeTarget();
+    } catch (error) {
+      attackSource.textContent = `來源：C1 已套用預覽／${attackRotation.value}／${attackPlayer.selectedOptions[0]?.textContent ?? "未選球員"}／LEFT_LONG｜UNCONFIGURED`;
+      attackMessage.textContent = error.message;
+      renderer.setAttackPreview(null);
+      refreshSpikeTarget();
+    }
+  }
   players.forEach((player) => {
     const appearance = createDefaultAppearance();
     appearances.set(player.id, appearance);
@@ -234,16 +365,25 @@ export function createTeamSimulatorApp({ root, onExit }) {
   };
 
   const handleReset = () => {
+    if (attackEditor.active) closeAttackEditor();
     if (zoneEditor.active) closeZoneEditor();
     renderer.stop();
     writeParameters(TEAM_SIMULATOR_PARAMETERS);
     simulator.configure(TEAM_SIMULATOR_PARAMETERS);
+    simulator.configureThirdPass(THIRD_PASS_TEST_DEFAULTS);
+    Object.entries(thirdPassFields).forEach(([key, input]) => { input.value = String(THIRD_PASS_TEST_DEFAULTS[key]); });
+    simulator.configureAttackMotion(D2_ATTACK_MOTION_V1);
+    Object.entries(motionFields).forEach(([key, input]) => { input.value = String(D2_ATTACK_MOTION_V1[key]); });
+    motionDirection.value = D2_ATTACK_MOTION_V1.direction;
+    Object.entries(spikeFields).forEach(([key, input]) => { input.value = String(SPIKE_TEST_DEFAULTS[key]); });
+    refreshSpikeTarget();
     renderer.resetCamera(simulator.getSnapshot());
     renderer.render(simulator.getSnapshot());
   };
   const handleCameraMode = () => renderer.setCameraMode(cameraMode.value);
   const openZoneEditor = () => {
-    resumeAfterZoneEditing = ["RUNNING", "PASS_IN_FLIGHT"].includes(simulator.getSnapshot().status);
+    if (attackEditor.active) closeAttackEditor();
+    resumeAfterZoneEditing = isReceiveExperimentRunning(simulator.getSnapshot().status);
     renderer.stop();
     renderer.setInteractionEnabled(false);
     zoneEditor.setActive(true);
@@ -255,13 +395,33 @@ export function createTeamSimulatorApp({ root, onExit }) {
     renderer.setInteractionEnabled(true);
     zoneEditButton.setAttribute("aria-pressed", "false");
     const snapshot = simulator.getSnapshot();
-    if (resumeAfterZoneEditing && ["RUNNING", "PASS_IN_FLIGHT"].includes(snapshot.status)) {
+    if (resumeAfterZoneEditing && isReceiveExperimentRunning(snapshot.status)) {
       renderer.play(simulator);
     } else {
       renderer.renderWhenReady(snapshot);
     }
     resumeAfterZoneEditing = false;
     if (!root.hidden) zoneEditButton.focus({ preventScroll: true });
+  };
+  const openAttackEditor = () => {
+    if (attackEditor.active) return;
+    if (zoneEditor.active) closeZoneEditor();
+    resumeAfterAttackEditing = isReceiveExperimentRunning(simulator.getSnapshot().status);
+    renderer.stop();
+    renderer.setInteractionEnabled(false);
+    attackEditor.setActive(true);
+    attackEditButton.setAttribute("aria-pressed", "true");
+    attackCloseButton.focus({ preventScroll: true });
+  };
+  const closeAttackEditor = () => {
+    attackEditor.setActive(false);
+    renderer.setInteractionEnabled(true);
+    attackEditButton.setAttribute("aria-pressed", "false");
+    const snapshot = simulator.getSnapshot();
+    if (resumeAfterAttackEditing && isReceiveExperimentRunning(snapshot.status)) renderer.play(simulator);
+    else renderer.renderWhenReady(snapshot);
+    resumeAfterAttackEditing = false;
+    if (!root.hidden) attackEditButton.focus({ preventScroll: true });
   };
   const handleCopyZones = async () => {
     try {
@@ -279,6 +439,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   };
   const closeSettings = () => settingsDialog.close();
   const handleOpenSettings = () => {
+    if (attackEditor.active) closeAttackEditor();
     settingsError.textContent = "";
     settingsDialog.showModal();
     requestAnimationFrame(() => fields.avatarSize.focus({ preventScroll: true }));
@@ -306,6 +467,13 @@ export function createTeamSimulatorApp({ root, onExit }) {
   backButton.addEventListener("click", handleBack);
   cameraMode.addEventListener("change", handleCameraMode);
   zoneEditButton.addEventListener("click", openZoneEditor);
+  attackEditButton.addEventListener("click", openAttackEditor);
+  attackCloseButton.addEventListener("click", closeAttackEditor);
+  [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.addEventListener("change", refreshAttackConfiguration));
+  spikeEnabled.addEventListener("change", refreshSpikeTarget);
+  spikeClickMode.addEventListener("change", refreshSpikeTarget);
+  spikeClear.addEventListener("click", clearSpikeTarget);
+  [spikeTargetX, spikeTargetY].forEach((input) => input.addEventListener("input", handleSpikeCoordinates));
   zoneCloseButton.addEventListener("click", closeZoneEditor);
   zoneCopyButton.addEventListener("click", handleCopyZones);
   zoneApplyButton.addEventListener("click", handleApplyZones);
@@ -322,6 +490,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   appearanceRemove.addEventListener("click", handleRemovePhoto);
   writeParameters(TEAM_SIMULATOR_PARAMETERS);
   renderAppearanceEditor();
+  refreshAttackConfiguration();
 
   return Object.freeze({
     show() {
@@ -331,6 +500,12 @@ export function createTeamSimulatorApp({ root, onExit }) {
     },
     hide() {
       renderer.stop();
+      if (attackEditor.active) {
+        attackEditor.setActive(false);
+        renderer.setInteractionEnabled(true);
+        attackEditButton.setAttribute("aria-pressed", "false");
+        resumeAfterAttackEditing = false;
+      }
       if (zoneEditor.active) {
         zoneEditor.setActive(false);
         renderer.setInteractionEnabled(true);
@@ -342,11 +517,19 @@ export function createTeamSimulatorApp({ root, onExit }) {
     destroy() {
       photoLoadSequence += 1;
       zoneEditor.destroy();
+      attackEditor.destroy();
       renderer.destroy();
       resetButton.removeEventListener("click", handleReset);
       backButton.removeEventListener("click", handleBack);
       cameraMode.removeEventListener("change", handleCameraMode);
       zoneEditButton.removeEventListener("click", openZoneEditor);
+      attackEditButton.removeEventListener("click", openAttackEditor);
+      attackCloseButton.removeEventListener("click", closeAttackEditor);
+      [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.removeEventListener("change", refreshAttackConfiguration));
+      spikeEnabled.removeEventListener("change", refreshSpikeTarget);
+      spikeClickMode.removeEventListener("change", refreshSpikeTarget);
+      spikeClear.removeEventListener("click", clearSpikeTarget);
+      [spikeTargetX, spikeTargetY].forEach((input) => input.removeEventListener("input", handleSpikeCoordinates));
       zoneCloseButton.removeEventListener("click", closeZoneEditor);
       zoneCopyButton.removeEventListener("click", handleCopyZones);
       zoneApplyButton.removeEventListener("click", handleApplyZones);
