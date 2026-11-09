@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { LeftLongReceiveSimulator } from "../src/simulator/left-long-simulator.js";
 import { SixPlayerReceiveSimulator } from "../src/simulator/team-simulator.js";
-import { TeamSimulatorRenderer } from "../src/simulator/team-simulator-renderer.js";
+import { TeamSimulatorRenderer, resolvePlayerTouchAnimation } from "../src/simulator/team-simulator-renderer.js";
 import { createAttackAssignment, resolveLeftLongConfiguration, isReceiveExperimentRunning } from "../src/simulator/attack-assignment.js";
 import { DEFAULT_ATTACK_POSITIONS, setAttackPosition } from "../src/simulator/attack-positions.js";
 
@@ -120,6 +120,14 @@ assert.deepEqual(disabledSnapshot, original.getSnapshot());
 const enabledSnapshot = run().snapshot;
 assert.deepEqual(enabledSnapshot.firstTouchContact, original.getSnapshot().firstTouchContact);
 assert.deepEqual(enabledSnapshot.secondTouchResult, original.getSnapshot().secondTouchResult);
+const setter = enabledSnapshot.players.find((player) => player.id === enabledSnapshot.secondTouchPlayerId);
+const setAnimation = resolvePlayerTouchAnimation(setter, enabledSnapshot);
+assert.equal(setAnimation.isSuccessfulSet, true);
+assert.equal(setAnimation.profile.minimumScale, 0.78);
+assert.notEqual(setAnimation.profile.level, "ULTRA_FAST");
+assert.equal(resolvePlayerTouchAnimation({ ...setter, action: "SET" }, {
+  ...enabledSnapshot, secondTouchResult: { ...enabledSnapshot.secondTouchResult, success: false },
+}).isSuccessfulSet, false);
 const otherPhysicalStates = (snapshot) => snapshot.players.filter((player) => player.id !== "SIM-P2")
   .map(({ touchEligible, ...player }) => player);
 assert.deepEqual(otherPhysicalStates(enabledSnapshot), otherPhysicalStates(original.getSnapshot()));

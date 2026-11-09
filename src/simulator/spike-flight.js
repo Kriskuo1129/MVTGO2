@@ -3,7 +3,7 @@ import { isReceiveExperimentRunning } from "./attack-assignment.js";
 import { SPIKE_COURT_V1, isSpikeGroundIn } from "./spike-court.js";
 
 export function isSpikeExperimentRunning(status) {
-  return isReceiveExperimentRunning(status) || ["SPIKE_IN_FLIGHT", "SPIKE_LANDING"].includes(status);
+  return isReceiveExperimentRunning(status) || ["SPIKE_IN_FLIGHT", "SPIKE_LANDING", "DEFENSE_TOUCH_LANDING", "BALL_BOUNCING"].includes(status);
 }
 
 const evaluate = (p, x) => p.reduceRight((value, coefficient) => value * x + coefficient, 0);
@@ -59,14 +59,14 @@ export function sweepSpikeNet(ball, from, to, radius, court = SPIKE_COURT_V1) {
   return null;
 }
 
-export function detectSpikeTermination(ball, from, to, radius, court = SPIKE_COURT_V1) {
+export function detectSpikeTermination(ball, from, to, radius, court = SPIKE_COURT_V1, { netCollisionEnabled = true } = {}) {
   const net = sweepSpikeNet(ball, from, to, radius, court);
   // 目標是地面點，但 Ball 的高度是球心高度。先接觸地面的球心高度為 radius。
   const h = heightPolynomial(ball);
   const floorRoots = roots([h[0] - radius, h[1], h[2]], from, to)
     .filter((u) => h[1] + 2 * h[2] * u <= 1e-7 && u > 1e-10);
   const ground = floorRoots[0];
-  if (net !== null && (ground === undefined || net <= ground + 1e-10)) {
+  if (netCollisionEnabled && net !== null && (ground === undefined || net <= ground + 1e-10)) {
     return { type: "SPIKE_NET", progress: net, position: sampleSimulatorBall(ball, net * ball.duration) };
   }
   if (ground !== undefined) {

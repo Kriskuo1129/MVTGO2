@@ -6,6 +6,9 @@ import { LINEUP_POSITIONS } from "../src/lineup/starting-lineup.js";
 import { resolveLeftLongConfiguration, isReceiveExperimentRunning } from "../src/simulator/attack-assignment.js";
 import { ATTACK_CONTACT_CONFIG, createAttackContactGeometry, detectAttackContact, getExpectedAttackContact } from "../src/simulator/attack-contact.js";
 import { THIRD_PASS_TEST_DEFAULTS, validateThirdPassParameters } from "../src/simulator/third-pass.js";
+
+assert.equal(THIRD_PASS_TEST_DEFAULTS.flightDuration, 1.5);
+assert.equal(THIRD_PASS_TEST_DEFAULTS.arcHeight, 360);
 import { sampleSimulatorBall } from "../src/simulator/ball.js";
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);

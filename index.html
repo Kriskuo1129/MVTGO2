@@ -101,6 +101,10 @@
           <button id="team-simulator-reset" class="secondary-button" type="button">重設參數</button>
         </section>
 
+        <section id="team-simulator-click-controls" class="team-simulator-click-controls" aria-label="球場點擊操作">
+          <p id="team-simulator-click-hint">點擊球場設定發球落點並啟動 Rally。</p>
+        </section>
+
         <section id="pass-target-zone-editor" class="pass-target-zone-editor" aria-labelledby="pass-target-zone-title" hidden>
           <div class="pass-target-zone-editor__header">
             <div>
@@ -157,9 +161,18 @@
           <p>D2 預設採用使用者確認的 V1 動畫：60 世界像素、0.8 秒，並保留手動調整。實際抵達 ATTACK 後依一次性預測起跳；接觸高度相對於跳躍後頭像，球路只在第三段開始時規劃一次。揮擊接近 ±30° 仍須真實碰撞，成功或揮空後都會完成旋轉落地。</p>
           <p id="left-long-message" role="status" aria-live="polite"></p>
           <fieldset class="spike-controls">
-            <legend>D2 指定落點扣球</legend>
+            <legend>D2 長攻自然球路</legend>
             <label><input id="spike-enabled" type="checkbox" checked />啟用 D2（需先啟用 LEFT_LONG）</label>
             <div class="attack-position-selectors">
+              <label>第四段模式<select id="spike-flight-mode">
+                <option value="NATURAL">自然速度／重力（Phase 2D-E）</option>
+                <option value="LEGACY_TARGET">指定落點（舊版除錯）</option>
+              </select></label>
+              <label>攻擊能力<input id="spike-attack-ability" type="number" min="1" max="99" step="1" value="70" /></label>
+              <span id="spike-unlocked-speed" class="parameter-hint">最高解鎖球速：FAST</span>
+              <label>攻擊穩定<input id="spike-attack-consistency" type="number" min="1" max="99" step="1" value="70" /></label>
+              <label>Seed 模式<select id="spike-seed-mode"><option value="AUTO">AUTO（每 Rally 更新）</option><option value="FIXED">FIXED（可重現）</option></select></label>
+              <label>RNG Seed<input id="spike-random-seed" type="number" step="1" value="12345" /></label>
               <label>球場點擊模式<select id="spike-click-mode">
                 <option value="SERVE">設定發球落點（啟動 Rally）</option>
                 <option value="SPIKE_TARGET">設定扣球落點（不發球）</option>
@@ -170,8 +183,19 @@
               <label>弧度／下墜（世界像素）<input id="spike-arc" type="number" min="-200" max="300" step="5" /></label>
               <label>球網高度 V1（暫定）<input id="spike-net-height" type="number" min="0" max="400" step="5" /></label>
             </div>
+            <label><input id="spike-net-collision-enabled" type="checkbox" />啟用扣球掛網判定（實驗）</label>
             <button id="spike-target-clear" class="secondary-button" type="button">清除扣球落點</button>
-            <p>先選「設定扣球落點」並點左半場，可重選；再切回「設定發球落點」點球場開始。發球後鎖定本 Rally 目標，直到完成或重設。青色小點是地面目標，第四段僅在真實 THIRD_TOUCH 後開始。</p>
+            <fieldset class="single-defense-controls">
+              <legend>單人後排防守（實驗）</legend>
+              <label><input id="single-defense-enabled" type="checkbox" />啟用 AWAY 單人防守</label>
+              <div class="attack-position-selectors">
+                <label>初始 X<input id="single-defense-x" type="number" min="228" max="1139.99" step="any" /></label>
+                <label>初始 Y<input id="single-defense-y" type="number" min="90" max="810" step="any" /></label>
+                <label>移動速度<input id="single-defense-speed" type="number" min="1" max="1600" step="10" /></label>
+              </div>
+              <p>預設座標僅供本實驗驗證，不會寫入正式站位 Library。防守員只在真實 THIRD_TOUCH 產生扣球球路後開始追球。</p>
+            </fieldset>
+            <p>自然模式由真實 THIRD_TOUCH 的品質、速度與重力產生球路，不使用指定落點。舊版除錯模式才需先設定扣球落點。第四段只在真實 THIRD_TOUCH 後開始。</p>
             <p id="spike-court-description">細虛線為暫定 V1 場界，並非背景圖片線條的物理校準；球網高度與扣球球路參數皆為暫時實驗設定。</p>
             <pre id="spike-debug" class="team-simulator-debug">扣球落點：UNCONFIGURED</pre>
           </fieldset>
@@ -238,6 +262,7 @@
             <div id="spike-target-overlay" class="spike-target-overlay" hidden aria-hidden="true">
               <span id="spike-court-outline" class="spike-court-outline"></span>
               <span id="spike-target-marker" class="spike-target-marker" hidden></span>
+              <span id="single-defense-prediction" class="single-defense-prediction" hidden></span>
             </div>
             <div id="left-long-targets" class="left-long-targets" hidden aria-hidden="true">
               <span class="left-long-dot left-long-dot--ready" data-left-long-target="readyPosition"></span>
@@ -252,7 +277,7 @@
           </div>
         </div>
 
-        <div class="simulator-output" aria-live="polite">
+        <div class="simulator-output">
           <p id="team-simulator-status" data-state="READY">點擊球場指定發球落點。</p>
           <p id="team-simulator-telemetry">球路 HIGH_ARC｜時間 0.00 s｜責任 尚未分配</p>
           <pre id="team-simulator-debug" class="team-simulator-debug">一傳品質：尚未判定</pre>

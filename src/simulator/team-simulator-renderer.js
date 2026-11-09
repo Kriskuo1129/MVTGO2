@@ -10,6 +10,19 @@ import {
   RECEIVE_ANIMATION_CLASS_NAMES,
 } from "./receive-animation.js";
 
+export function resolvePlayerTouchAnimation(player, snapshot) {
+  const isReceiving = player.action === "RECEIVE";
+  const isSuccessfulSet = player.action === "SET"
+    && snapshot.secondTouchResult?.success === true
+    && snapshot.secondTouchResult.playerId === player.id;
+  // SET 共用既有縮放／回彈動畫；至少採 FAST 設定，避免 ULTRA_FAST 翻滾。
+  const profile = getReceiveAnimationProfile(isSuccessfulSet
+    ? Math.max(1, snapshot.parameters.flightDuration)
+    : snapshot.parameters.flightDuration);
+  return Object.freeze({ isReceiving, isSuccessfulSet, profile,
+    hasTouchAnimation: isReceiving || isSuccessfulSet });
+}
+
 export class TeamSimulatorRenderer {
   constructor({ root, onTargetSelected }) {
     if (!root || typeof onTargetSelected !== "function") {
@@ -72,11 +85,22 @@ export class TeamSimulatorRenderer {
 
   renderSpikeExperiment(snapshot) {
     const running = isReceiveExperimentRunning(snapshot.status);
-    for (const id of ["spike-enabled", "spike-click-mode", "spike-target-x", "spike-target-y", "spike-target-clear", "spike-duration", "spike-arc", "spike-net-height"]) {
+    for (const id of ["spike-enabled", "spike-flight-mode", "spike-attack-ability", "spike-attack-consistency", "spike-seed-mode", "spike-random-seed", "spike-click-mode", "spike-target-x", "spike-target-y", "spike-target-clear", "spike-duration", "spike-arc", "spike-net-height", "spike-net-collision-enabled",
+      "single-defense-enabled", "single-defense-x", "single-defense-y", "single-defense-speed"]) {
       this.root.querySelector(`#${id}`).disabled = running;
     }
+    const naturalMode = this.root.querySelector("#spike-flight-mode").value === "NATURAL";
+    if (!running && naturalMode) {
+      for (const id of ["spike-click-mode", "spike-target-x", "spike-target-y", "spike-target-clear"]) {
+        this.root.querySelector(`#${id}`).disabled = true;
+      }
+      this.root.querySelector("#spike-random-seed").disabled
+        = this.root.querySelector("#spike-seed-mode").value === "AUTO";
+    }
     const flight = snapshot.spikeFlight;
-    const target = running && snapshot.lockedSpikeTarget ? snapshot.lockedSpikeTarget : this.spikePreview?.target;
+    const target = running
+      ? snapshot.attackResolution?.targetPoint ?? snapshot.lockedSpikeTarget
+      : this.spikePreview?.target;
     const court = running ? flight?.court ?? this.spikePreview?.court : this.spikePreview?.court;
     const overlay = this.root.querySelector("#spike-target-overlay");
     overlay.hidden = !court;
@@ -93,19 +117,52 @@ export class TeamSimulatorRenderer {
       outline.style.width = `${(court.netX - b.minX) / snapshot.world.width * 100}%`;
       outline.style.height = `${(b.maxY - b.minY) / snapshot.world.height * 100}%`;
     }
+    const defenseMarker = this.root.querySelector("#single-defense-prediction");
+    const prediction = snapshot.defense?.prediction;
+    defenseMarker.hidden = !prediction;
+    if (prediction) {
+      defenseMarker.style.left = `${prediction.x / snapshot.world.width * 100}%`;
+      defenseMarker.style.top = `${prediction.y / snapshot.world.height * 100}%`;
+    }
     const lines = [`${running ? "目前指定" : "下次指定"}扣球落點：${target ? `(${target.x.toFixed(2)}, ${target.y.toFixed(2)}, 地面 0)` : "UNCONFIGURED"}｜${running && snapshot.lockedSpikeTarget ? "本 Rally 已鎖定" : "發球前可修改"}`];
     if (flight) {
       const net = flight.netCheck;
       const court = flight.court;
-      lines.push(`本 Rally 鎖定落點：(${flight.target.x.toFixed(2)}, ${flight.target.y.toFixed(2)})`);
+      lines.push(`第四段模式：${flight.mode ?? "LEGACY_TARGET"}`,
+        `固定擊球點：${snapshot.attackGeometry?.clock ?? 11} 點鐘｜舉球品質：${snapshot.attackResolution?.setQuality ?? "—"}`,
+        `本 Rally Seed：${snapshot.actualAttackSeed ?? "—"}`,
+        `有效攻擊：${snapshot.attackResolution?.effectiveAttack ?? "—"}｜有效穩定：${snapshot.attackResolution?.effectiveConsistency ?? "—"}`,
+        `最高解鎖球速：${snapshot.attackResolution?.highestUnlockedSpeed ?? "—"}｜抽選權重 ${snapshot.attackResolution ? Object.entries(snapshot.attackResolution.speedWeights).map(([level, weight]) => `${level} ${weight.toFixed(2)}%`).join("／") : "—"}`,
+        `界內目標機率：${snapshot.attackResolution ? (snapshot.attackResolution.inProbability * 100).toFixed(2) + "%" : "—"}｜抽選目標：${snapshot.attackResolution?.targetInBounds ? "IN" : snapshot.attackResolution ? "OUT" : "—"}`,
+        `targetPoint：${snapshot.attackResolution ? `(${snapshot.attackResolution.targetPoint.x.toFixed(2)}, ${snapshot.attackResolution.targetPoint.y.toFixed(2)})` : "—"}`,
+        `actualLandingPoint：${snapshot.spikeResult?.actualLandingPoint ? `(${snapshot.spikeResult.actualLandingPoint.x.toFixed(2)}, ${snapshot.spikeResult.actualLandingPoint.y.toFixed(2)})` : "—"}｜targetInBounds ${snapshot.attackResolution?.targetInBounds ?? "—"}｜actualInBounds ${snapshot.spikeResult?.actualInBounds ?? "—"}`,
+        `球速等級：${snapshot.naturalSpike?.speedLevel ?? "—"}｜實際出球速度 ${snapshot.naturalSpike?.actualSpeed?.toFixed(2) ?? "—"}`,
+        `速度向量：X ${snapshot.naturalSpike?.velocity.x.toFixed(2) ?? "—"}、Y ${snapshot.naturalSpike?.velocity.y.toFixed(2) ?? "—"}、垂直 ${snapshot.naturalSpike?.velocity.height.toFixed(2) ?? "—"}`,
+        `出球垂直角：${snapshot.naturalSpike ? (Math.atan2(snapshot.naturalSpike.velocity.height,
+          Math.hypot(snapshot.naturalSpike.velocity.x, snapshot.naturalSpike.velocity.y)) * 180 / Math.PI).toFixed(2) + "°" : "—"}`,
+        `預測落點／舊版鎖定點：(${flight.target.x.toFixed(2)}, ${flight.target.y.toFixed(2)})`);
       lines.push(`真實 THIRD_TOUCH 起點：(${flight.start.x.toFixed(2)}, ${flight.start.y.toFixed(2)}, 高 ${flight.start.height.toFixed(2)})`,
         `第四段：${flight.status}｜${flight.parameters.flightDuration} 秒｜進度 ${(flight.progress * 100).toFixed(1)}%｜剩餘 ${flight.remainingTime.toFixed(3)} 秒`,
+        `掛網判定：${net.enabled ? "啟用" : "關閉（僅觀察幾何）"}｜幾何相交：${net.geometryIntersectionDetected ? "YES" : "NO"}`,
         `球網 V1：X ${court.netX}、高 ${court.netHeight}｜${net.result}`,
         `平面預計穿越高度：${net.predictedPlaneCrossingHeight?.toFixed(2) ?? "—"}｜實際穿越高度：${net.planeCrossingHeight?.toFixed(2) ?? "尚未穿越"}`,
         `球網接觸高度：${net.contactHeight?.toFixed(2) ?? "—"}｜終止原因：${snapshot.spikeResult?.reason ?? "尚無"}`,
         `球心高度：${snapshot.ball.height.toFixed(2)}｜球半徑：${flight.radius}；地面落點 0 對應球心 ${flight.radius}`,
         `攻擊手：${snapshot.attackMotion?.jumpPhase ?? "—"}｜${snapshot.attackMotion?.rotationAngle.toFixed(2) ?? "—"}°`);
+      if (snapshot.naturalSpike) lines.push(
+        `首次落地：${snapshot.naturalSpike.firstGroundContact ? `(${snapshot.naturalSpike.firstGroundContact.x.toFixed(2)}, ${snapshot.naturalSpike.firstGroundContact.y.toFixed(2)})／${snapshot.naturalSpike.firstGroundContact.type}` : "尚未"}`,
+        `反彈次數：${snapshot.naturalSpike.bounceCount}｜目前水平速度 ${Math.hypot(snapshot.naturalSpike.velocity.x, snapshot.naturalSpike.velocity.y).toFixed(2)}｜BALL_REST ${snapshot.naturalSpike.rest ? "YES" : "NO"}`);
     } else lines.push("等待真實 THIRD_TOUCH；D2 未啟用時保留 D1 流程。");
+    const defense = snapshot.defense;
+    lines.push(`單人防守：${defense?.enabled ? "啟用" : "關閉"}`);
+    if (defense?.enabled) {
+      const player = defense.player, config = defense.configuration, result = defense.result;
+      lines.push(`防守員初始 (${config.initialX.toFixed(2)}, ${config.initialY.toFixed(2)})｜速度 ${config.moveSpeed}`,
+        player ? `目前 (${player.x.toFixed(2)}, ${player.y.toFixed(2)})｜來球 ${player.receiveDirection ?? "等待扣球"}` : "目前：等待真實 THIRD_TOUCH",
+        prediction ? `預測接觸 (${prediction.x.toFixed(2)}, ${prediction.y.toFixed(2)})｜剩餘 ${(prediction.interceptTime - snapshot.ball.elapsed).toFixed(3)} 秒｜距離 ${prediction.travelDistance.toFixed(2)}｜${prediction.reachable ? "可達" : "最佳努力"}` : "預測接觸：尚未啟動",
+        result?.success ? `DEFENSE_TOUCH：${result.time.toFixed(3)} 秒｜球心距離 ${result.centerDistance.toFixed(2)}｜有效半徑 ${result.effectiveAvatarRadius.toFixed(2)}｜球半徑 ${result.ballRadius.toFixed(2)}｜重疊 ${result.overlapDepth.toFixed(2)}`
+          : result ? `防守失敗：${result.reason}` : "防守結果：等待扣球");
+    }
     this.root.querySelector("#spike-debug").textContent = lines.join("\n");
   }
 
@@ -271,7 +328,7 @@ export class TeamSimulatorRenderer {
     }
     const viewportRect = this.viewport.getBoundingClientRect();
     if (viewportRect.width > 0 && viewportRect.height > 0
-      && !["ATTACK_LANDING", "SPIKE_LANDING", "THIRD_TOUCH_COMPLETE", "THIRD_TOUCH_MISSED", "SPIKE_NET", "SPIKE_LANDED", "SPIKE_OUT"].includes(snapshot.status)) {
+      && !["ATTACK_LANDING", "SPIKE_LANDING", "DEFENSE_TOUCH_LANDING", "THIRD_TOUCH_COMPLETE", "THIRD_TOUCH_MISSED", "SPIKE_NET", "SPIKE_LANDED", "SPIKE_OUT", "DEFENSE_TOUCH_COMPLETE"].includes(snapshot.status)) {
       this.camera.update({
         ballX: snapshot.ball.x,
         remainingFlightTime: snapshot.ball.duration * Math.max(0, 1 - snapshot.ball.progress),
@@ -309,6 +366,8 @@ export class TeamSimulatorRenderer {
 
     snapshot.players.forEach((player) => {
       const { wrapper, motion, avatar } = this.ensurePlayerElement(player);
+      wrapper.hidden = false;
+      wrapper.dataset.team = "HOME";
       wrapper.style.left = toLeft(player.x);
       wrapper.style.top = toTop(player.y);
       wrapper.classList.toggle("is-primary-receiver", player.responsibility === "PRIMARY");
@@ -317,15 +376,15 @@ export class TeamSimulatorRenderer {
       wrapper.title = `${player.position}｜${player.rotationPosition}｜${player.task}`;
       avatar.style.width = `${avatarDisplaySize}px`;
       avatar.style.height = `${avatarDisplaySize}px`;
-      const isReceiving = player.action === "RECEIVE";
-      const animationProfile = getReceiveAnimationProfile(snapshot.parameters.flightDuration);
+      const { isReceiving, isSuccessfulSet, profile: animationProfile,
+        hasTouchAnimation } = resolvePlayerTouchAnimation(player, snapshot);
       wrapper.style.setProperty("--receive-minimum-scale", String(animationProfile.minimumScale));
       wrapper.style.setProperty("--receive-animation-duration", `${animationProfile.animationDurationMs}ms`);
       avatar.classList.toggle("is-receiving", isReceiving);
-      avatar.classList.remove(...RECEIVE_ANIMATION_CLASS_NAMES);
-      if (isReceiving) {
-        avatar.classList.add(animationProfile.className);
-      }
+      avatar.classList.toggle("is-setting", isSuccessfulSet);
+      RECEIVE_ANIMATION_CLASS_NAMES.forEach((className) => {
+        avatar.classList.toggle(className, hasTouchAnimation && className === animationProfile.className);
+      });
       avatar.classList.toggle("receive-from-left", isReceiving && player.receiveDirection === "FROM_LEFT");
       avatar.classList.toggle("receive-from-right", isReceiving && player.receiveDirection === "FROM_RIGHT");
       const isUltraFastReceive = isReceiving && animationProfile.level === "ULTRA_FAST";
@@ -344,6 +403,36 @@ export class TeamSimulatorRenderer {
       motion.style.transform = hasAttackPose
         ? `translateY(${-player.jumpHeight * cameraView.displayScale}px) rotate(${player.rotationAngle}deg)` : "";
     });
+
+    const defensePlayer = snapshot.defense?.player;
+    const staleDefense = this.playerElements.get(snapshot.defense?.configuration?.playerId ?? "AWAY-DEF-1");
+    if (!defensePlayer && staleDefense) staleDefense.wrapper.hidden = true;
+    if (defensePlayer) {
+      const { wrapper, motion, avatar } = this.ensurePlayerElement(defensePlayer);
+      wrapper.hidden = false;
+      wrapper.dataset.team = "AWAY";
+      wrapper.style.left = toLeft(defensePlayer.x);
+      wrapper.style.top = toTop(defensePlayer.y);
+      wrapper.dataset.task = defensePlayer.task;
+      wrapper.title = `AWAY 防守實驗｜${defensePlayer.task}`;
+      avatar.style.width = `${avatarDisplaySize}px`;
+      avatar.style.height = `${avatarDisplaySize}px`;
+      const profile = getReceiveAnimationProfile(snapshot.spikeFlight?.parameters.flightDuration ?? 0.65);
+      const isReceiving = defensePlayer.action === "RECEIVE";
+      wrapper.style.setProperty("--receive-minimum-scale", String(profile.minimumScale));
+      wrapper.style.setProperty("--receive-animation-duration", `${profile.animationDurationMs}ms`);
+      avatar.classList.toggle("is-receiving", isReceiving);
+      avatar.classList.remove(...RECEIVE_ANIMATION_CLASS_NAMES);
+      if (isReceiving) avatar.classList.add(profile.className);
+      avatar.classList.toggle("receive-from-left", isReceiving && defensePlayer.receiveDirection === "FROM_LEFT");
+      avatar.classList.toggle("receive-from-right", isReceiving && defensePlayer.receiveDirection === "FROM_RIGHT");
+      const pushDirection = isReceiving ? getReceivePushDirection(defensePlayer.receiveDirection) : 1;
+      const availableWorldDistance = pushDirection > 0 ? snapshot.world.width - defensePlayer.x : defensePlayer.x;
+      motion.style.setProperty("--receive-roll-distance", `${pushDirection * Math.min(snapshot.parameters.avatarSize, availableWorldDistance) * cameraView.displayScale}px`);
+      motion.style.setProperty("--receive-roll-rotation", `${pushDirection * 360}deg`);
+      motion.classList.toggle("is-ultra-fast-receiving", isReceiving && profile.level === "ULTRA_FAST");
+      motion.style.transform = "";
+    }
 
     const primary = snapshot.players.find((player) => player.id === snapshot.primaryReceiverId);
     const ballDisplayPoint = snapshot.status === "AWAITING_PASS_TARGET_CONFIG" && primary?.contactPoint
@@ -369,10 +458,14 @@ export class TeamSimulatorRenderer {
       THIRD_TOUCH_COMPLETE: "THIRD_TOUCH_COMPLETE：真實第三觸球成功，攻擊手已完成落地；未生成扣球球路。",
       THIRD_TOUCH_MISSED: `THIRD_TOUCH_MISSED：${snapshot.thirdTouchResult?.reason ?? "未碰到攻擊手"}`,
       SPIKE_IN_FLIGHT: `SPIKE_IN_FLIGHT：扣球飛行中；攻擊手${snapshot.attackMotion?.jumpPhase === "LANDED" ? "已落地" : "收勢／落地中"}。`,
+      BALL_BOUNCING: "BALL_BOUNCING：首次落地結果已鎖定，排球依恢復係數與阻尼自然反彈。",
+      BALL_REST: "BALL_REST：反彈能量低於停止門檻，排球靜止。",
       SPIKE_LANDING: `已記錄 ${snapshot.spikeResult?.type}；攻擊手繼續落地，實驗尚未結束。`,
       SPIKE_NET: "SPIKE_NET：扣球碰網；攻擊手已落地。此結果不代表得分。",
       SPIKE_LANDED: "SPIKE_LANDED：扣球落在對方 V1 有效場內；攻擊手已落地。此結果不代表得分。",
       SPIKE_OUT: "SPIKE_OUT：扣球落在 V1 有效場外；攻擊手已落地。此結果不代表得分。",
+      DEFENSE_TOUCH_LANDING: "已記錄 DEFENSE_TOUCH；球已停止，攻擊手繼續完成落地。",
+      DEFENSE_TOUCH_COMPLETE: "DEFENSE_TOUCH_COMPLETE：AWAY 防守員真實接觸扣球，第四段球路已停止。",
       SECOND_TOUCH_MISSED: "第二段球已落地，第二次觸球未完成。",
       PASS_COMPLETE: snapshot.receiveQuality?.quality === "BAD"
         ? "BAD 一傳已飛出場外，未啟動第二次觸球。"

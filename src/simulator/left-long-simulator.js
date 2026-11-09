@@ -132,6 +132,7 @@ export class LeftLongReceiveSimulator extends SixPlayerReceiveSimulator {
     const previousPhase = this.attackAssignment.movementPhase;
     this.simulationTime += this.fixedStep;
     stepSimulatorBall(this.ball, this.fixedStep);
+    if (typeof this.adjustThirdPassBall === "function") this.adjustThirdPassBall();
     this.advanceAttackPlayer(player);
     const strikeWindow = getAttackStrikeWindow(this.attackMotion, this.simulationTime - this.fixedStep, this.simulationTime);
     const contact = isPlayerTouchEligible(this.touchEligibility, player.id)

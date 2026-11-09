@@ -22,10 +22,13 @@ for (const target of [null, { x: NaN, y: 450 }, { x: Infinity, y: 450 }, { x: 11
 assert.deepEqual(validateSpikeTarget({ x: 500, y: 450 }), { x: 500, y: 450, height: 0 });
 assert.throws(() => validateSpikeParameters({ flightDuration: 0 }));
 assert.throws(() => validateSpikeParameters({ netHeight: NaN }));
-assert.ok(isSpikeGroundIn({ x: SPIKE_COURT_V1.bounds.minX - radius - 0.5, y: 450 }, radius));
-assert.equal(isSpikeGroundIn({ x: SPIKE_COURT_V1.bounds.minX - radius - 1.1, y: 450 }, radius), false);
-assert.equal(isSpikeGroundIn({ x: SPIKE_COURT_V1.bounds.minX - radius * 0.85,
-  y: SPIKE_COURT_V1.bounds.minY - radius * 0.85 }, radius), false);
+assert.equal(validateSpikeParameters({}).netCollisionEnabled, false);
+assert.equal(validateSpikeParameters({}).flightDuration, 0.65);
+const leftEdgeAt450 = 625 + (510 - 625) * ((450 - 260) / (790 - 260));
+assert.ok(isSpikeGroundIn({ x: leftEdgeAt450 - radius - 0.5, y: 450 }, radius));
+assert.equal(isSpikeGroundIn({ x: leftEdgeAt450 - radius - 2, y: 450 }, radius), false);
+assert.equal(isSpikeGroundIn({ x: 625 - radius * 0.85,
+  y: 260 - radius * 0.85 }, radius), false);
 
 function ballFixture({ start = { x: 1300, y: 450, height: 100 }, target = { x: 300, y: 450, height: radius }, duration = 0.01, arcHeight = 0 } = {}) {
   const ball = createSimulatorBall(start); launchSimulatorBall(ball, { start, target, duration, arcHeight }); return ball;
@@ -49,10 +52,11 @@ assert.ok(earlyGround.progress < 1); near(earlyGround.position.height, radius);
 const legacy = ballFixture({ target: { x: 300, y: 450 } }); stepSimulatorBall(legacy, 1); assert.equal(legacy.height, 0);
 const sphere = ballFixture(); stepSimulatorBall(sphere, 1); assert.equal(sphere.height, radius);
 
-function run({ target = { x: 500, y: 450 }, parameters = {}, fps = 120, thirdMiss = false } = {}) {
+function run({ target = { x: 700, y: 450 }, parameters = {}, fps = 120, thirdMiss = false } = {}) {
   const simulator = new SpikeReceiveSimulator({ random: () => 0.5 });
   simulator.configureAttackAssignment(resolveLeftLongConfiguration(DEFAULT_ATTACK_POSITIONS, "R1", "SIM-P2", simulator.players, simulator.secondTouchPlayerId));
-  simulator.configureSpikeExperiment({ target, parameters });
+  if (thirdMiss) simulator.configureThirdPass({ flightDuration: 1.6, arcHeight: 260, contactHeight: 180 });
+  simulator.configureSpikeExperiment({ target, parameters: { netCollisionEnabled: true, ...parameters } });
   simulator.launch({ x: 1800, y: 450 });
   assert.deepEqual(simulator.lockedSpikeTarget, { x: target.x, y: target.y, height: 0 });
   assert.ok(Object.isFrozen(simulator.lockedSpikeTarget));
@@ -90,7 +94,7 @@ function run({ target = { x: 500, y: 450 }, parameters = {}, fps = 120, thirdMis
 }
 
 let landedSnapshot;
-for (const [target, expected] of [[{ x: 500, y: 450 }, "SPIKE_LANDED"], [{ x: 1050, y: 450 }, "SPIKE_NET"], [{ x: 100, y: 450 }, "SPIKE_OUT"]]) {
+for (const [target, expected] of [[{ x: 700, y: 450 }, "SPIKE_LANDED"], [{ x: 1050, y: 450 }, "SPIKE_NET"], [{ x: 100, y: 450 }, "SPIKE_OUT"]]) {
   const result = run({ target }), { snapshot } = result;
   assert.equal(snapshot.status, expected);
   if (expected === "SPIKE_LANDED") landedSnapshot = snapshot;
@@ -120,9 +124,17 @@ renderer.renderSpikeExperiment(landedSnapshot);
 near(parseFloat(elements.get("#spike-target-marker").style.left), 800 / 2280 * 100);
 assert.ok(elements.get("#spike-debug").textContent.includes("下次指定扣球落點：(800.00, 500.00"));
 renderer.renderSpikeExperiment({ ...landedSnapshot, status: "SPIKE_IN_FLIGHT" });
-near(parseFloat(elements.get("#spike-target-marker").style.left), 500 / 2280 * 100);
+near(parseFloat(elements.get("#spike-target-marker").style.left), 700 / 2280 * 100);
 assert.equal(elements.get("#spike-click-mode").disabled, true);
 assert.equal(run({ target: { x: 1050, y: 450 }, parameters: { flightDuration: 0.05, netHeight: 300 } }).snapshot.status, "SPIKE_NET");
+const ignoredNet = run({ target: { x: 1050, y: 450 }, parameters: { netHeight: 300, netCollisionEnabled: false } }).snapshot;
+assert.notEqual(ignoredNet.status, "SPIKE_NET");
+assert.equal(ignoredNet.spikeFlight.netCheck.geometryIntersectionDetected, true);
+assert.equal(ignoredNet.spikeFlight.netCheck.result, "INTERSECTION_IGNORED");
+assert.deepEqual(
+  run({ target: { x: 1050, y: 450 }, parameters: { netHeight: 300, netCollisionEnabled: false }, fps: 30 }).snapshot,
+  run({ target: { x: 1050, y: 450 }, parameters: { netHeight: 300, netCollisionEnabled: false }, fps: 144 }).snapshot,
+);
 const missed = run({ thirdMiss: true });
 assert.equal(missed.started, false); assert.equal(missed.snapshot.spikeFlight, null);
 assert.equal(missed.snapshot.events.some((e) => e.type === "SPIKE_STARTED"), false);
@@ -132,4 +144,4 @@ for (const simulator of [normal, disabled]) { simulator.launch({ x: 1800, y: 450
 const { lockedSpikeTarget, spikeFlight, spikeResult, attackMotion, attackAssignment, thirdTouchStatus, thirdPass, thirdTouchResult, ...ordinary } = disabled.getSnapshot();
 assert.equal(disabled.status, "SECOND_TOUCH_COMPLETE"); assert.deepEqual(ordinary, normal.getSnapshot());
 assert.equal(spikeFlight, null); assert.equal(spikeResult, null);
-console.log("PASS: target validation/lock; approved D2 animation; real THIRD_TOUCH start; concurrent spike/landing; sphere net sweep/high-speed/edge clearance; ground radius/line tolerance; NET/LANDED/OUT; third miss; ordinary mode; identical 30/144 FPS.");
+console.log("PASS: target validation/lock; approved D2 animation; real THIRD_TOUCH start; concurrent spike/landing; net toggle/geometry debug; sphere net sweep/high-speed/edge clearance; ground radius/line tolerance; NET/LANDED/OUT; third miss; ordinary mode; identical 30/144 FPS.");

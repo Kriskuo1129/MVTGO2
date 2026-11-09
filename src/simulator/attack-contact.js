@@ -22,9 +22,10 @@ export function createAttackContactGeometry({ avatarWorldSize, ballWorldSize, co
   return Object.freeze({ type: "ATTACK", ...config, avatarRadius, ballRadius, maximumCenterDistance,
     contactHeight, minimumHeight: contactHeight - config.heightTolerance,
     maximumHeight: contactHeight + config.heightTolerance,
-    // 接球方右半場面向左側球網，預期接觸在頭像左上方。
-    offset: Object.freeze({ x: (direction === "RIGHT" ? 1 : -1) * Math.sin(Math.PI / 3) * anchorDistance,
-      y: -Math.cos(Math.PI / 3) * anchorDistance }),
+    // 固定 11 點鐘（向右攻擊時鏡像為 1 點鐘）；不再依抽選品質改變接觸點。
+    clock: direction === "RIGHT" ? 1 : 11,
+    offset: Object.freeze({ x: (direction === "RIGHT" ? 1 : -1) * Math.sin(Math.PI / 6) * anchorDistance,
+      y: -Math.cos(Math.PI / 6) * anchorDistance }),
   });
 }
 

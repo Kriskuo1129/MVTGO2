@@ -1,7 +1,7 @@
 import { getExpectedAttackContact, ATTACK_CONTACT_CONFIG } from "./attack-contact.js";
 
 // 暫時測試預設，尚未正式定案。時間為直到自然落地的秒數；弧度為基線上額外世界像素。
-export const THIRD_PASS_TEST_DEFAULTS = Object.freeze({ flightDuration: 1.6, arcHeight: 260, contactHeight: 180 });
+export const THIRD_PASS_TEST_DEFAULTS = Object.freeze({ flightDuration: 1.5, arcHeight: 360, contactHeight: 180 });
 
 export function validateThirdPassParameters(parameters) {
   const { flightDuration, arcHeight, contactHeight } = parameters;

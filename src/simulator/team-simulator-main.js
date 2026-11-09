@@ -7,11 +7,14 @@ import { PassTargetZoneEditor } from "./pass-target-zone-editor.js";
 import { AttackPositionEditor } from "./attack-position-editor.js";
 import { ATTACK_ROTATIONS } from "./attack-positions.js";
 import { resolveLeftLongConfiguration } from "./attack-assignment.js";
-import { SpikeReceiveSimulator, D2_ATTACK_MOTION_V1 } from "./spike-simulator.js";
+import { SpikeReceiveSimulator, D2_ATTACK_MOTION_V1, NATURAL_SPIKE_EXPERIMENT_DEFAULTS, SPIKE_FLIGHT_MODES } from "./spike-simulator.js";
 import { isSpikeExperimentRunning as isReceiveExperimentRunning } from "./spike-flight.js";
 import { SPIKE_COURT_V1, SPIKE_TEST_DEFAULTS, validateSpikeTarget, validateSpikeParameters } from "./spike-court.js";
 import { THIRD_PASS_TEST_DEFAULTS, validateThirdPassParameters } from "./third-pass.js";
 import { validateAttackMotionParameters } from "./attack-motion.js";
+import { SINGLE_DEFENSE_DEFAULTS, validateSingleDefenseConfiguration } from "./single-defense.js";
+import { ATTACK_SEED_MODES } from "./attack-quality.js";
+import { getHighestUnlockedSpikeSpeed } from "./attack-resolution.js";
 
 const PARAMETER_FIELDS = Object.freeze({
   avatarSize: "team-simulator-avatar-size",
@@ -64,7 +67,48 @@ async function verifyBrowserCanDecodePhoto(photoUrl) {
   }
 }
 
+function createCollapsibleSection(className, summaryText) {
+  const details = document.createElement("details");
+  details.className = className;
+  const summary = document.createElement("summary");
+  summary.textContent = summaryText;
+  details.append(summary);
+  return details;
+}
+
+function organizeTeamSimulatorLayout(root) {
+  const toolbar = root.querySelector(".team-simulator-toolbar");
+  const clickControls = root.querySelector("#team-simulator-click-controls");
+  const viewport = root.querySelector("#team-simulator-viewport");
+  const output = root.querySelector(".simulator-output");
+  const parameters = createCollapsibleSection("team-simulator-panel team-simulator-parameters-panel", "實驗參數：進攻、扣球與單人防守");
+  const debug = createCollapsibleSection("team-simulator-panel team-simulator-debug-panel", "詳細 Debug");
+  const debugContent = document.createElement("div");
+  debugContent.className = "team-simulator-debug-scroll";
+  const editors = document.createElement("div");
+  editors.className = "team-simulator-advanced-editors";
+  const clickModeLabel = root.querySelector("#spike-click-mode").closest("label");
+  const leftLong = root.querySelector(".left-long-experiment");
+  const zoneEditor = root.querySelector("#pass-target-zone-editor");
+  const attackEditor = root.querySelector("#attack-position-editor");
+  const debugNodes = [
+    root.querySelector("#team-simulator-debug"),
+    root.querySelector("#left-long-debug"),
+    root.querySelector("#spike-debug"),
+  ];
+
+  clickControls.prepend(clickModeLabel);
+  output.classList.add("team-simulator-live-status");
+  output.removeAttribute("aria-live");
+  parameters.append(leftLong);
+  debugNodes.forEach((node) => debugContent.append(node));
+  debug.append(debugContent);
+  editors.append(zoneEditor, attackEditor);
+  toolbar.after(clickControls, viewport, output, parameters, debug, editors);
+}
+
 export function createTeamSimulatorApp({ root, onExit }) {
+  organizeTeamSimulatorLayout(root);
   const simulator = new SpikeReceiveSimulator();
   const attackEnabled = root.querySelector("#left-long-enabled");
   const attackRotation = root.querySelector("#left-long-rotation");
@@ -72,16 +116,44 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const attackSource = root.querySelector("#left-long-source");
   const attackMessage = root.querySelector("#left-long-message");
   const spikeEnabled = root.querySelector("#spike-enabled");
+  const spikeFlightMode = root.querySelector("#spike-flight-mode");
+  const spikeAttackAbility = root.querySelector("#spike-attack-ability");
+  const spikeAttackConsistency = root.querySelector("#spike-attack-consistency");
+  const spikeUnlockedSpeed = root.querySelector("#spike-unlocked-speed");
+  const spikeSeedMode = root.querySelector("#spike-seed-mode");
+  const spikeRandomSeed = root.querySelector("#spike-random-seed");
   const spikeClickMode = root.querySelector("#spike-click-mode");
   const spikeClear = root.querySelector("#spike-target-clear");
   const spikeTargetX = root.querySelector("#spike-target-x");
   const spikeTargetY = root.querySelector("#spike-target-y");
+  const spikeNetCollisionEnabled = root.querySelector("#spike-net-collision-enabled");
+  const clickHint = root.querySelector("#team-simulator-click-hint");
+  const defenseEnabled = root.querySelector("#single-defense-enabled");
+  const defenseX = root.querySelector("#single-defense-x");
+  const defenseY = root.querySelector("#single-defense-y");
+  const defenseSpeed = root.querySelector("#single-defense-speed");
+  defenseEnabled.checked = SINGLE_DEFENSE_DEFAULTS.enabled;
+  defenseX.value = String(SINGLE_DEFENSE_DEFAULTS.initialX);
+  defenseY.value = String(SINGLE_DEFENSE_DEFAULTS.initialY);
+  defenseSpeed.value = String(SINGLE_DEFENSE_DEFAULTS.moveSpeed);
   let selectedSpikeTarget = null;
+  spikeFlightMode.value = NATURAL_SPIKE_EXPERIMENT_DEFAULTS.mode;
+  spikeAttackAbility.value = String(NATURAL_SPIKE_EXPERIMENT_DEFAULTS.attack);
+  spikeAttackConsistency.value = String(NATURAL_SPIKE_EXPERIMENT_DEFAULTS.attackConsistency);
+  spikeSeedMode.value = NATURAL_SPIKE_EXPERIMENT_DEFAULTS.seedMode;
+  spikeRandomSeed.value = String(NATURAL_SPIKE_EXPERIMENT_DEFAULTS.randomSeed);
+  const refreshUnlockedSpeed = () => {
+    const attack = Number(spikeAttackAbility.value);
+    spikeUnlockedSpeed.textContent = Number.isInteger(attack) && attack >= 1 && attack <= 99
+      ? `最高解鎖球速：${getHighestUnlockedSpikeSpeed(attack)}` : "最高解鎖球速：—";
+  };
+  refreshUnlockedSpeed();
   const spikeFields = { flightDuration: root.querySelector("#spike-duration"),
     arcHeight: root.querySelector("#spike-arc"), netHeight: root.querySelector("#spike-net-height") };
   Object.entries(spikeFields).forEach(([key, input]) => { input.value = String(SPIKE_TEST_DEFAULTS[key]); });
+  spikeNetCollisionEnabled.checked = SPIKE_TEST_DEFAULTS.netCollisionEnabled;
   const spikeBounds = SPIKE_COURT_V1.bounds;
-  root.querySelector("#spike-court-description").textContent = `細虛線為暫定 V1 有效場界：X ${spikeBounds.minX}～${spikeBounds.maxX}、Y ${spikeBounds.minY}～${spikeBounds.maxY}；不是背景圖片線條的物理校準。對方半場以球網 X=${SPIKE_COURT_V1.netX} 截斷。可指定左半場場外點，結果依幾何判定 OUT。`;
+  root.querySelector("#spike-court-description").textContent = `有效場界已依 court-01.png 的 2280×900 圖片像素校準為梯形（包圍盒 X ${spikeBounds.minX}～${spikeBounds.maxX}、Y ${spikeBounds.minY}～${spikeBounds.maxY}）；對方半場以球網 X=${SPIKE_COURT_V1.netX} 截斷，執行時只使用座標幾何，不讀取圖片顏色。`;
   spikeTargetX.max = String(SPIKE_COURT_V1.netX);
   spikeTargetY.max = String(SPIKE_COURT_V1.world.height);
   const thirdPassFields = {
@@ -166,14 +238,27 @@ export function createTeamSimulatorApp({ root, onExit }) {
           return;
         }
         const attackConfiguration = readAttackConfiguration();
-        if (attackConfiguration && spikeEnabled.checked && !selectedSpikeTarget) throw new Error("UNCONFIGURED：尚未設定扣球落點，請先使用「設定扣球落點」模式點選左半場。");
-        if (attackConfiguration && spikeEnabled.checked) {
+        const legacySpike = spikeFlightMode.value === SPIKE_FLIGHT_MODES.LEGACY_TARGET;
+        if (attackConfiguration && spikeEnabled.checked && legacySpike && !selectedSpikeTarget) throw new Error("UNCONFIGURED：舊版除錯模式尚未設定扣球落點。");
+        if (attackConfiguration && spikeEnabled.checked && legacySpike) {
           const typed = validateSpikeTarget({ x: spikeTargetX.value.trim() === "" ? NaN : Number(spikeTargetX.value),
             y: spikeTargetY.value.trim() === "" ? NaN : Number(spikeTargetY.value) });
           if (typed.x !== selectedSpikeTarget.x || typed.y !== selectedSpikeTarget.y) throw new Error("扣球落點欄位尚未完成有效設定，請確認 X／Y。");
         }
-        const spikeConfiguration = attackConfiguration && spikeEnabled.checked ? { target: validateSpikeTarget(selectedSpikeTarget),
-          parameters: validateSpikeParameters(Object.fromEntries(Object.entries(spikeFields).map(([key, input]) => [key, input.value.trim() === "" ? NaN : Number(input.value)]))) } : null;
+        const spikeConfiguration = attackConfiguration && spikeEnabled.checked ? {
+          mode: spikeFlightMode.value,
+          attack: Number(spikeAttackAbility.value),
+          attackConsistency: Number(spikeAttackConsistency.value),
+          seedMode: spikeSeedMode.value,
+          randomSeed: Number(spikeRandomSeed.value),
+          target: legacySpike ? validateSpikeTarget(selectedSpikeTarget) : null,
+          parameters: validateSpikeParameters({
+            ...Object.fromEntries(Object.entries(spikeFields).map(([key, input]) => [key, input.value.trim() === "" ? NaN : Number(input.value)])),
+            netCollisionEnabled: spikeNetCollisionEnabled.checked,
+          }) } : null;
+        const defenseConfiguration = validateSingleDefenseConfiguration({ enabled: defenseEnabled.checked,
+          initialX: Number(defenseX.value), initialY: Number(defenseY.value), moveSpeed: Number(defenseSpeed.value) });
+        if (defenseConfiguration.enabled && !spikeConfiguration) throw new Error("單人後排防守需同時啟用 LEFT_LONG 與 D2。");
         const thirdParameters = attackConfiguration
           ? validateThirdPassParameters(Object.fromEntries(Object.entries(thirdPassFields).map(([key, input]) => [key, input.value.trim() === "" ? NaN : Number(input.value)]))) : null;
         const motionParameters = attackConfiguration ? validateAttackMotionParameters({
@@ -191,6 +276,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
         if (thirdParameters) simulator.configureThirdPass(thirdParameters);
         if (motionParameters) simulator.configureAttackMotion(motionParameters);
         simulator.configureSpikeExperiment(spikeConfiguration);
+        simulator.configureSingleDefense(defenseConfiguration);
         simulator.launch(target);
         attackMessage.textContent = "";
         renderer.play(simulator);
@@ -215,10 +301,20 @@ export function createTeamSimulatorApp({ root, onExit }) {
   let resumeAfterAttackEditing = false;
 
   function refreshSpikeTarget() {
+    const legacy = spikeFlightMode.value === SPIKE_FLIGHT_MODES.LEGACY_TARGET;
+    spikeRandomSeed.disabled = spikeSeedMode.value === ATTACK_SEED_MODES.AUTO;
+    if (!legacy) spikeClickMode.value = "SERVE";
+    spikeClickMode.disabled = !legacy;
+    spikeTargetX.disabled = !legacy;
+    spikeTargetY.disabled = !legacy;
+    spikeClear.disabled = !legacy;
     if (!spikeEnabled.checked) spikeClickMode.value = "SERVE";
+    clickHint.textContent = spikeClickMode.value === "SPIKE_TARGET"
+      ? "扣球落點模式：點擊左半場只更新 D2 目標，不會啟動 Rally。"
+      : "發球落點模式：點擊球場後會鎖定設定並啟動 Rally。";
     spikeTargetX.value = selectedSpikeTarget ? String(selectedSpikeTarget.x) : "";
     spikeTargetY.value = selectedSpikeTarget ? String(selectedSpikeTarget.y) : "";
-    renderer.setSpikePreview(spikeEnabled.checked && (attackEnabled.checked || spikeClickMode.value === "SPIKE_TARGET")
+    renderer.setSpikePreview(legacy && spikeEnabled.checked && (attackEnabled.checked || spikeClickMode.value === "SPIKE_TARGET")
       ? { target: selectedSpikeTarget, court: SPIKE_COURT_V1 } : null);
   }
   const handleSpikeCoordinates = () => {
@@ -376,6 +472,12 @@ export function createTeamSimulatorApp({ root, onExit }) {
     Object.entries(motionFields).forEach(([key, input]) => { input.value = String(D2_ATTACK_MOTION_V1[key]); });
     motionDirection.value = D2_ATTACK_MOTION_V1.direction;
     Object.entries(spikeFields).forEach(([key, input]) => { input.value = String(SPIKE_TEST_DEFAULTS[key]); });
+    spikeNetCollisionEnabled.checked = SPIKE_TEST_DEFAULTS.netCollisionEnabled;
+    defenseEnabled.checked = SINGLE_DEFENSE_DEFAULTS.enabled;
+    defenseX.value = String(SINGLE_DEFENSE_DEFAULTS.initialX);
+    defenseY.value = String(SINGLE_DEFENSE_DEFAULTS.initialY);
+    defenseSpeed.value = String(SINGLE_DEFENSE_DEFAULTS.moveSpeed);
+    simulator.configureSingleDefense(SINGLE_DEFENSE_DEFAULTS);
     refreshSpikeTarget();
     renderer.resetCamera(simulator.getSnapshot());
     renderer.render(simulator.getSnapshot());
@@ -471,6 +573,9 @@ export function createTeamSimulatorApp({ root, onExit }) {
   attackCloseButton.addEventListener("click", closeAttackEditor);
   [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.addEventListener("change", refreshAttackConfiguration));
   spikeEnabled.addEventListener("change", refreshSpikeTarget);
+  spikeFlightMode.addEventListener("change", refreshSpikeTarget);
+  spikeAttackAbility.addEventListener("input", refreshUnlockedSpeed);
+  spikeSeedMode.addEventListener("change", refreshSpikeTarget);
   spikeClickMode.addEventListener("change", refreshSpikeTarget);
   spikeClear.addEventListener("click", clearSpikeTarget);
   [spikeTargetX, spikeTargetY].forEach((input) => input.addEventListener("input", handleSpikeCoordinates));
@@ -527,6 +632,9 @@ export function createTeamSimulatorApp({ root, onExit }) {
       attackCloseButton.removeEventListener("click", closeAttackEditor);
       [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.removeEventListener("change", refreshAttackConfiguration));
       spikeEnabled.removeEventListener("change", refreshSpikeTarget);
+      spikeFlightMode.removeEventListener("change", refreshSpikeTarget);
+      spikeAttackAbility.removeEventListener("input", refreshUnlockedSpeed);
+      spikeSeedMode.removeEventListener("change", refreshSpikeTarget);
       spikeClickMode.removeEventListener("change", refreshSpikeTarget);
       spikeClear.removeEventListener("click", clearSpikeTarget);
       [spikeTargetX, spikeTargetY].forEach((input) => input.removeEventListener("input", handleSpikeCoordinates));
