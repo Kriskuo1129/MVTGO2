@@ -57,14 +57,17 @@ for (let index = 1; index < bounces.length; index++) {
 }
 
 const result30 = run({ fps: 30 });
+const result60 = run({ fps: 60 });
 const result144 = run({ fps: 144 });
-for (const snapshot of [result30, result144]) {
+for (const snapshot of [result30, result60, result144]) {
   assert.equal(snapshot.naturalSpike.speedLevel, result.naturalSpike.speedLevel);
   assert.equal(snapshot.spikeResult.type, result.spikeResult.type);
   assert.equal(snapshot.naturalSpike.bounceCount, result.naturalSpike.bounceCount);
 }
 assert.deepEqual(result30.events, result144.events);
+assert.deepEqual(result30.events, result60.events);
 assert.deepEqual(result30.attackResolution, result144.attackResolution);
+assert.deepEqual(result30.attackResolution, result60.attackResolution);
 const autoA = run({ seedMode: ATTACK_SEED_MODES.AUTO });
 const autoB = run({ seedMode: ATTACK_SEED_MODES.AUTO });
 assert.notEqual(autoA.actualAttackSeed, autoB.actualAttackSeed);
@@ -92,4 +95,4 @@ const missedDefense = run({ defenseEnabled: false });
 assert.equal(missedDefense.status, "BALL_REST");
 assert.ok(missedDefense.events.some((event) => event.type === "BALL_FIRST_GROUND_CONTACT"));
 
-console.log("PASS: fixed 11 o'clock real THIRD_TOUCH; power/consistency resolution after touch; target/actual landing separation; speed order/FAST 0.65; net/defense/bounce; AUTO/FIXED seed; identical 30/144 FPS.");
+console.log("PASS: fixed 11 o'clock real THIRD_TOUCH; power/consistency resolution after touch; target/actual landing separation; speed order/FAST 0.65; net/defense/bounce; AUTO/FIXED seed; identical 30/60/144 FPS.");

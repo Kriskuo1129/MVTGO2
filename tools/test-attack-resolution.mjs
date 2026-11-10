@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { applySetQualityModifiers, applySpikeSpeedUnlocks, ATTACK_POWER_ANCHORS,
   getAttackSpeedWeights, getHighestUnlockedSpikeSpeed, getInTargetProbability,
-  LEFT_LONG_TARGET_V1, resolveAttackOutput, SPIKE_SPEED_UNLOCK_THRESHOLDS,
+  getUltraFastChance, LEFT_LONG_TARGET_V1, resolveAttackOutput, SPIKE_SPEED_UNLOCK_THRESHOLDS,
   sampleNaturalOutTarget, sampleUniformQuadrilateral } from "../src/simulator/attack-resolution.js";
 import { createSeededRandom, SPIKE_SPEED_LEVELS } from "../src/simulator/attack-quality.js";
 import { isSpikeGroundIn, SPIKE_COURT_V1 } from "../src/simulator/spike-court.js";
@@ -16,15 +16,28 @@ assert.equal(applySetQualityModifiers(50, 50, "BAD").effectiveConsistency, 38);
 assert.equal(getInTargetProbability(1), 0.6);
 assert.equal(getInTargetProbability(50), 0.78);
 assert.equal(getInTargetProbability(99), 0.96);
-for (const anchor of ATTACK_POWER_ANCHORS) {
-  assert.deepEqual(getAttackSpeedWeights(anchor.ability), Object.fromEntries(
-    Object.values(SPIKE_SPEED_LEVELS).map((key) => [key, anchor[key]])));
+const expectedAnchors = new Map([
+  [1, [95, 5, 0, 0]], [25, [75, 25, 0, 0]], [40, [45, 55, 0, 0]],
+  [45, [35, 64, 1, 0]], [60, [15, 65, 20, 0]], [70, [8, 42, 50, 0]],
+  [80, [3, 21, 75, 1]], [90, [1, 10, 79.96675900277009, 9.033240997229916]],
+  [99, [0, 3, 67, 30]],
+]);
+for (const [ability, expected] of expectedAnchors) {
+  const actual = getAttackSpeedWeights(ability);
+  Object.values(SPIKE_SPEED_LEVELS).forEach((level, index) => {
+    assert.ok(Math.abs(actual[level] - expected[index]) < 1e-9, `${ability} ${level}`);
+  });
 }
-for (const ability of [1, 13, 25, 38, 50, 62, 75, 87, 99]) {
+for (let ability = 1; ability <= 99; ability++) {
   const weights = getAttackSpeedWeights(ability);
-  assert.ok(Object.values(weights).every((weight) => weight > 0));
+  assert.ok(Object.values(weights).every((weight) => weight >= 0));
   assert.ok(Math.abs(Object.values(weights).reduce((sum, weight) => sum + weight, 0) - 100) < 1e-9);
+  if (ability < 45) assert.equal(weights.FAST, 0);
+  if (ability < 80) assert.equal(weights.ULTRA_FAST, 0);
 }
+assert.equal(getUltraFastChance(80), 1);
+assert.ok(Math.abs(getUltraFastChance(90) - 9.033240997229916) < 1e-12);
+assert.equal(getUltraFastChance(99), 30);
 assert.deepEqual(SPIKE_SPEED_UNLOCK_THRESHOLDS, { SLOW: 1, NORMAL: 1, FAST: 45, ULTRA_FAST: 80 });
 assert.equal(getHighestUnlockedSpikeSpeed(1), "NORMAL");
 assert.equal(getHighestUnlockedSpikeSpeed(44), "NORMAL");
@@ -110,6 +123,11 @@ assert.equal(getInTargetProbability(applySetQualityModifiers(1, 70, "NORMAL").ef
   getInTargetProbability(applySetQualityModifiers(99, 70, "NORMAL").effectiveConsistency));
 assert.deepEqual(getAttackSpeedWeights(applySetQualityModifiers(70, 1, "NORMAL").effectiveAttack),
   getAttackSpeedWeights(applySetQualityModifiers(70, 99, "NORMAL").effectiveAttack));
+const attack79Normal = resolveAttackOutput({ attack: 79, attackConsistency: 50, setQuality: "NORMAL", seed: 7 });
+const attack79Perfect = resolveAttackOutput({ attack: 79, attackConsistency: 50, setQuality: "PERFECT", seed: 7 });
+assert.deepEqual(attack79Perfect.speedWeights, attack79Normal.speedWeights);
+assert.equal(attack79Perfect.speedLevel, attack79Normal.speedLevel);
+assert.equal(attack79Perfect.speedWeights.ULTRA_FAST, 0);
 
 console.log(JSON.stringify({ parameterSamplesPerScenario: 3000, targetUniformityMean: qMean, scenarios: report }, null, 2));
 console.log("PASS: unlock thresholds/boundaries and 8×10000 no-over-tier draws; normalized unlocked weights; power anchors/interpolation; independent consistency; set-quality modifiers; uniform quadrilateral; natural out bands; 5×3000 parameter samples.");

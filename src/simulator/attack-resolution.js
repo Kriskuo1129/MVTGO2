@@ -8,11 +8,15 @@ export const SET_QUALITY_MODIFIERS = Object.freeze({
 });
 
 export const ATTACK_POWER_ANCHORS = Object.freeze([
-  Object.freeze({ ability: 1, SLOW: 65, NORMAL: 30, FAST: 4, ULTRA_FAST: 1 }),
-  Object.freeze({ ability: 25, SLOW: 40, NORMAL: 40, FAST: 17, ULTRA_FAST: 3 }),
-  Object.freeze({ ability: 50, SLOW: 20, NORMAL: 40, FAST: 32, ULTRA_FAST: 8 }),
-  Object.freeze({ ability: 75, SLOW: 8, NORMAL: 25, FAST: 47, ULTRA_FAST: 20 }),
-  Object.freeze({ ability: 99, SLOW: 2, NORMAL: 10, FAST: 43, ULTRA_FAST: 45 }),
+  Object.freeze({ ability: 1, SLOW: 95, NORMAL: 5, FAST: 0 }),
+  Object.freeze({ ability: 25, SLOW: 75, NORMAL: 25, FAST: 0 }),
+  Object.freeze({ ability: 40, SLOW: 45, NORMAL: 55, FAST: 0 }),
+  Object.freeze({ ability: 45, SLOW: 35, NORMAL: 64, FAST: 1 }),
+  Object.freeze({ ability: 60, SLOW: 15, NORMAL: 65, FAST: 20 }),
+  Object.freeze({ ability: 70, SLOW: 8, NORMAL: 42, FAST: 50 }),
+  Object.freeze({ ability: 80, SLOW: 3, NORMAL: 21, FAST: 75 }),
+  Object.freeze({ ability: 90, SLOW: 1, NORMAL: 10, FAST: 79.96675900277009 }),
+  Object.freeze({ ability: 99, SLOW: 0, NORMAL: 3, FAST: 67 }),
 ]);
 
 export const SPIKE_SPEED_UNLOCK_THRESHOLDS = Object.freeze({
@@ -47,14 +51,28 @@ export function applySetQualityModifiers(attack, attackConsistency, setQuality) 
     powerModifier: modifier.power, consistencyModifier: modifier.consistency });
 }
 
-export function getAttackSpeedWeights(effectiveAttack) {
-  clampAbility(effectiveAttack);
-  const upperIndex = ATTACK_POWER_ANCHORS.findIndex((anchor) => anchor.ability >= effectiveAttack);
+export function getUltraFastChance(attack) {
+  clampAbility(attack);
+  return attack < 80 ? 0 : 1 + 29 * Math.pow((attack - 80) / 19, 2);
+}
+
+export function getAttackSpeedWeights(attack) {
+  clampAbility(attack);
+  const upperIndex = ATTACK_POWER_ANCHORS.findIndex((anchor) => anchor.ability >= attack);
   const upper = ATTACK_POWER_ANCHORS[upperIndex], lower = ATTACK_POWER_ANCHORS[Math.max(0, upperIndex - 1)];
-  if (upper === lower) return Object.freeze(Object.fromEntries(Object.values(SPIKE_SPEED_LEVELS).map((key) => [key, upper[key]])));
-  const t = (effectiveAttack - lower.ability) / (upper.ability - lower.ability);
-  return Object.freeze(Object.fromEntries(Object.values(SPIKE_SPEED_LEVELS)
-    .map((key) => [key, lower[key] + (upper[key] - lower[key]) * t])));
+  const t = upper === lower ? 0 : (attack - lower.ability) / (upper.ability - lower.ability);
+  const interpolated = Object.fromEntries(["SLOW", "NORMAL", "FAST"]
+    .map((key) => [key, lower[key] + (upper[key] - lower[key]) * t]));
+  const ultra = getUltraFastChance(attack);
+  const available = 100 - ultra;
+  if (attack < SPIKE_SPEED_UNLOCK_THRESHOLDS.FAST) interpolated.FAST = 0;
+  const subtotal = Object.values(interpolated).reduce((sum, weight) => sum + weight, 0);
+  return Object.freeze({
+    SLOW: interpolated.SLOW / subtotal * available,
+    NORMAL: interpolated.NORMAL / subtotal * available,
+    FAST: interpolated.FAST / subtotal * available,
+    ULTRA_FAST: ultra,
+  });
 }
 
 export function getHighestUnlockedSpikeSpeed(attack) {
@@ -130,7 +148,8 @@ export function resolveAttackOutput({ attack, attackConsistency, setQuality, see
   court = SPIKE_COURT_V1 }) {
   const effective = applySetQualityModifiers(attack, attackConsistency, setQuality);
   const channels = createAttackRandomChannels(seed);
-  const rawSpeedWeights = getAttackSpeedWeights(effective.effectiveAttack);
+  // 球速只看原始 attack；舉球品質不解鎖、也不改變球速分布。
+  const rawSpeedWeights = getAttackSpeedWeights(attack);
   const speedWeights = applySpikeSpeedUnlocks(rawSpeedWeights, attack);
   const speedLevel = selectWeighted(speedWeights, channels.speed);
   const inProbability = getInTargetProbability(effective.effectiveConsistency);

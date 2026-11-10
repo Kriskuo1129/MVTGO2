@@ -89,7 +89,8 @@ for (const playerId of ["SIM-P2", "SIM-P4", "SIM-P6"]) {
 const normal = run({ ability: 30 });
 assert.equal(normal.snapshot.receiveQuality.quality, "NORMAL"); assert.ok(normal.sawReady && normal.sawAttack);
 const bad = run({ ability: 1 });
-assert.equal(bad.snapshot.receiveQuality.quality, "BAD");
+assert.equal(bad.snapshot.receiveOutcome.result, "ERROR");
+assert.equal(bad.snapshot.receiveQuality, null);
 assert.equal(bad.sawReady || bad.sawAttack, false); assert.equal(bad.snapshot.attackAssignment, null);
 assert.equal(bad.snapshot.thirdPass, null);
 const missed = run({ miss: true });

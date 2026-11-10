@@ -7,8 +7,8 @@ import { isSpikeExperimentRunning } from "../src/simulator/spike-flight.js";
 import { SpikeReceiveSimulator } from "../src/simulator/spike-simulator.js";
 
 function createConfiguredSimulator({ enabled = true, target = { x: 700, y: 450 },
-  defense = {}, parameters = {}, fps = 120 } = {}) {
-  const simulator = new SpikeReceiveSimulator({ random: () => 0.5 });
+  defense = {}, parameters = {}, fps = 120, random = () => 0.5 } = {}) {
+  const simulator = new SpikeReceiveSimulator({ random });
   simulator.configureAttackAssignment(resolveLeftLongConfiguration(
     DEFAULT_ATTACK_POSITIONS, "R1", "SIM-P2", simulator.players, simulator.secondTouchPlayerId,
   ));
@@ -69,4 +69,14 @@ assert.equal(net.snapshot.status, "SPIKE_NET");
 assert.equal(net.snapshot.defense.result.reason, "SPIKE_NET");
 assert.equal(net.snapshot.events.some((event) => event.type === "DEFENSE_TOUCH"), false);
 
-console.log("PASS: D2 off unchanged; defender starts only after THIRD_TOUCH; mirrored direction; fixed-speed movement; true touch/miss/net; 0.65 s; identical 30/144 FPS result.");
+let receiveRandomCalls = 0;
+const uncontrolled = createConfiguredSimulator({ random: () => {
+  receiveRandomCalls += 1;
+  return receiveRandomCalls <= 5 ? 0.5 : 0.999;
+} });
+assert.equal(uncontrolled.snapshot.defense.result.type, "DEFENSE_ERROR");
+assert.equal(uncontrolled.snapshot.events.some((event) => event.type === "DEFENSE_TOUCH"), false);
+assert.ok(uncontrolled.snapshot.events.some((event) => event.type === "DEFENSE_ERROR"));
+assert.ok(["SPIKE_LANDED", "SPIKE_OUT", "SPIKE_NET"].includes(uncontrolled.snapshot.status));
+
+console.log("PASS: D2 off unchanged; defender starts only after THIRD_TOUCH; shared SUCCESS/ERROR receive; mirrored direction; fixed-speed movement; true touch/miss/net; 0.65 s; identical 30/144 FPS result.");

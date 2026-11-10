@@ -10,7 +10,8 @@ export const ATTACK_MOVEMENT_PHASES = Object.freeze({
 export const ATTACK_ARRIVAL_TOLERANCE = 0.0001;
 
 export function isReceiveExperimentRunning(status) {
-  return ["RUNNING", "PASS_IN_FLIGHT", "THIRD_PASS_IN_FLIGHT", "ATTACK_LANDING"].includes(status);
+  return ["RUNNING", "FINISHING", "RECEIVE_ERROR_IN_FLIGHT", "PASS_IN_FLIGHT",
+    "THIRD_PASS_IN_FLIGHT", "ATTACK_LANDING"].includes(status);
 }
 
 // C1 相容查詢僅供實驗入口；Assignment 本身只需要任務負責人與兩個目標點。

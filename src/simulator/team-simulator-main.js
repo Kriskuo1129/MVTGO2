@@ -2,6 +2,7 @@ import {
   TEAM_SIMULATOR_PARAMETERS,
 } from "./team-simulator.js";
 import { TeamSimulatorRenderer } from "./team-simulator-renderer.js";
+import { ContinuousRallySimulator } from "./continuous-rally-simulator.js";
 import { RECEIVE_SPEED_OPTIONS } from "./receive-animation.js";
 import { PassTargetZoneEditor } from "./pass-target-zone-editor.js";
 import { AttackPositionEditor } from "./attack-position-editor.js";
@@ -110,6 +111,8 @@ function organizeTeamSimulatorLayout(root) {
 export function createTeamSimulatorApp({ root, onExit }) {
   organizeTeamSimulatorLayout(root);
   const simulator = new SpikeReceiveSimulator();
+  const continuousSimulator = new ContinuousRallySimulator();
+  const continuousRallyEnabled = root.querySelector("#continuous-rally-enabled");
   const attackEnabled = root.querySelector("#left-long-enabled");
   const attackRotation = root.querySelector("#left-long-rotation");
   const attackPlayer = root.querySelector("#left-long-player");
@@ -227,6 +230,14 @@ export function createTeamSimulatorApp({ root, onExit }) {
     root,
     onTargetSelected(target) {
       try {
+        if (continuousRallyEnabled.checked) {
+          renderer.stop();
+          continuousSimulator.configure(readParameters());
+          continuousSimulator.launch(target);
+          attackMessage.textContent = "雙方連續攻防模式：同一顆球將持續至 Rally 終止。";
+          renderer.play(continuousSimulator);
+          return;
+        }
         if (simulator.lockedSpikeTarget && isReceiveExperimentRunning(simulator.status)) {
           throw new Error("本 Rally 進行中，扣球落點已鎖定；請等待完成或重設。");
         }
@@ -466,6 +477,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
     renderer.stop();
     writeParameters(TEAM_SIMULATOR_PARAMETERS);
     simulator.configure(TEAM_SIMULATOR_PARAMETERS);
+    continuousSimulator.configure(TEAM_SIMULATOR_PARAMETERS);
     simulator.configureThirdPass(THIRD_PASS_TEST_DEFAULTS);
     Object.entries(thirdPassFields).forEach(([key, input]) => { input.value = String(THIRD_PASS_TEST_DEFAULTS[key]); });
     simulator.configureAttackMotion(D2_ATTACK_MOTION_V1);

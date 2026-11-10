@@ -43,8 +43,10 @@ import {
   getReceiveSpeedProfile,
 } from "./receive-animation.js";
 import {
+  createReceiveErrorTrajectory,
   RECEIVE_QUALITIES,
-  resolveReceiveQuality,
+  RECEIVE_RESULTS,
+  resolveReceiveContact,
   SECOND_PASS_TRAJECTORY_CONFIG,
   SECOND_TOUCH_TRAJECTORY_TUNING,
 } from "./receive-quality.js";
@@ -188,6 +190,8 @@ export class SixPlayerReceiveSimulator {
     this.secondTouchResult = null;
     this.touchEligibility = createTouchEligibilityState();
     this.receiveQualityResult = null;
+    this.receiveOutcome = null;
+    this.receiveErrorTrajectory = null;
     this.secondPass = null;
   }
 
@@ -300,6 +304,16 @@ export class SixPlayerReceiveSimulator {
   }
 
   stepFixed() {
+    if (this.status === "RECEIVE_ERROR_IN_FLIGHT") {
+      this.simulationTime += this.fixedStep;
+      stepSimulatorBall(this.ball, this.fixedStep);
+      if (this.ball.landed) {
+        this.status = "RECEIVE_ERROR_COMPLETE";
+        this.events.push(Object.freeze({ type: "RECEIVE_ERROR_LANDED",
+          time: this.simulationTime, ballX: this.ball.x, ballY: this.ball.y }));
+      }
+      return;
+    }
     if (this.status === "PASS_IN_FLIGHT") {
       this.stepSecondPass();
       return;
@@ -417,7 +431,12 @@ export class SixPlayerReceiveSimulator {
         contactingPlayer.x - contactingPlayer.idealReceiveX,
         contactingPlayer.y - contactingPlayer.idealReceiveY,
       );
-      this.receiveQualityResult = resolveReceiveQuality({
+      const incomingVelocity = Object.freeze({
+        x: (contact.ballX - previousBall.x) / (this.fixedStep * Math.max(contact.stepProgress, Number.EPSILON)),
+        y: (contact.ballY - previousBall.y) / (this.fixedStep * Math.max(contact.stepProgress, Number.EPSILON)),
+      });
+      this.receiveOutcome = resolveReceiveContact({
+        contacted: true,
         receiveAbility: contactingPlayer.receiveAbility,
         incomingSpeedLevel: getReceiveSpeedProfile(this.parameters.flightDuration).level,
         positionDistance,
@@ -426,6 +445,22 @@ export class SixPlayerReceiveSimulator {
         morale: contactingPlayer.morale,
         random: this.random,
       });
+      this.events.push(Object.freeze({ type: "RECEIVE_RESOLVED", time: contactTime,
+        playerId: contactingPlayer.id, ...this.receiveOutcome }));
+      if (this.receiveOutcome.result === RECEIVE_RESULTS.ERROR) {
+        this.receiveErrorTrajectory = createReceiveErrorTrajectory({
+          start: { x: this.ball.x, y: this.ball.y, height: this.ball.height },
+          incomingVelocity,
+          random: this.random,
+        });
+        launchSimulatorBall(this.ball, this.receiveErrorTrajectory);
+        this.setTouchEligibility({ phase: TOUCH_PHASES.RECEIVE, eligiblePlayerIds: [] });
+        this.status = "RECEIVE_ERROR_IN_FLIGHT";
+        this.events.push(Object.freeze({ type: "RECEIVE_ERROR_STARTED", time: contactTime,
+          playerId: contactingPlayer.id, trajectory: this.receiveErrorTrajectory }));
+        return;
+      }
+      this.receiveQualityResult = this.receiveOutcome.qualityResult;
       this.events.push(Object.freeze({
         type: "RECEIVE_QUALITY_RESOLVED",
         time: contactTime,
@@ -680,6 +715,8 @@ export class SixPlayerReceiveSimulator {
       secondTouchResult: this.secondTouchResult,
       touchEligibility: createTouchEligibilitySnapshot(this.touchEligibility),
       receiveQuality: this.receiveQualityResult,
+      receiveOutcome: this.receiveOutcome,
+      receiveErrorTrajectory: this.receiveErrorTrajectory,
       secondPass: this.secondPass,
       ball: Object.freeze({
         x: this.ball.x,

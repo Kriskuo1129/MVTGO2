@@ -10,6 +10,23 @@ import {
   RECEIVE_ANIMATION_CLASS_NAMES,
 } from "./receive-animation.js";
 
+export function formatSecondTouchPrepareTarget(snapshot) {
+  const target = snapshot?.secondTouchPrepareTarget;
+  return target && Number.isFinite(target.x) && Number.isFinite(target.y)
+    ? `提前跑位目標：(${target.x.toFixed(2)}, ${target.y.toFixed(2)})`
+    : "提前跑位目標：由目前 Rally 階段動態決定";
+}
+
+export function getTeamSimulatorStatusText(snapshot) {
+  if (!["FINISHING", "ENDED"].includes(snapshot?.status)) return null;
+  const prefix = snapshot.status === "FINISHING" ? "Rally 收尾中" : "Rally 結束";
+  return `${prefix}：${snapshot.rallyResult?.reason ?? "未知"}／得分方 ${snapshot.rallyResult?.scoringTeam ?? "—"}`;
+}
+
+function formatDebugDistance(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)} 世界單位` : "—";
+}
+
 export function resolvePlayerTouchAnimation(player, snapshot) {
   const isReceiving = player.action === "RECEIVE";
   const isSuccessfulSet = player.action === "SET"
@@ -160,8 +177,10 @@ export class TeamSimulatorRenderer {
       lines.push(`防守員初始 (${config.initialX.toFixed(2)}, ${config.initialY.toFixed(2)})｜速度 ${config.moveSpeed}`,
         player ? `目前 (${player.x.toFixed(2)}, ${player.y.toFixed(2)})｜來球 ${player.receiveDirection ?? "等待扣球"}` : "目前：等待真實 THIRD_TOUCH",
         prediction ? `預測接觸 (${prediction.x.toFixed(2)}, ${prediction.y.toFixed(2)})｜剩餘 ${(prediction.interceptTime - snapshot.ball.elapsed).toFixed(3)} 秒｜距離 ${prediction.travelDistance.toFixed(2)}｜${prediction.reachable ? "可達" : "最佳努力"}` : "預測接觸：尚未啟動",
-        result?.success ? `DEFENSE_TOUCH：${result.time.toFixed(3)} 秒｜球心距離 ${result.centerDistance.toFixed(2)}｜有效半徑 ${result.effectiveAvatarRadius.toFixed(2)}｜球半徑 ${result.ballRadius.toFixed(2)}｜重疊 ${result.overlapDepth.toFixed(2)}`
-          : result ? `防守失敗：${result.reason}` : "防守結果：等待扣球");
+        result?.success ? `DEFENSE_TOUCH／${result.quality}：${result.time.toFixed(3)} 秒｜球心距離 ${result.centerDistance.toFixed(2)}｜有效半徑 ${result.effectiveAvatarRadius.toFixed(2)}｜球半徑 ${result.ballRadius.toFixed(2)}｜重疊 ${result.overlapDepth.toFixed(2)}`
+          : result?.type === "DEFENSE_ERROR"
+            ? `DEFENSE_ERROR：已碰球但失控（成功率 ${(result.receiveOutcome.probability * 100).toFixed(1)}%），球路繼續。`
+            : result ? `防守失敗：${result.reason}` : "防守結果：等待扣球");
     }
     this.root.querySelector("#spike-debug").textContent = lines.join("\n");
   }
@@ -198,9 +217,17 @@ export class TeamSimulatorRenderer {
       `Movement Phase：${phase}`,
       `成功 SECOND_TOUCH：${secondTouchSucceeded ? "YES" : "NO"}`,
       `目前移動目標：${targetName ?? "無（尚未啟動或已清理）"}`,
-      `距離目前目標：${targetName ? assignment.targetDistance.toFixed(2) + " 世界單位" : "—"}`,
+      `距離目前目標：${targetName ? formatDebugDistance(assignment?.targetDistance) : "—"}`,
     ];
     if (failureReason) lines.push(`失敗／清理原因：${failureReason}；${snapshot.thirdPass ? "第三觸球未完成" : "本次進攻跑位未完成"}。`);
+    const setDebug = snapshot.setContactDiagnostic;
+    if (setDebug) lines.push(
+      `SET 診斷：Seed ${setDebug.seed}／${setDebug.team}／一傳 ${setDebug.receiveQuality ?? "—"}`,
+      `S 位置 (${setDebug.playerX.toFixed(2)}, ${setDebug.playerY.toFixed(2)})／目標 (${setDebug.targetX.toFixed(2)}, ${setDebug.targetY.toFixed(2)})`,
+      `預測接觸 ${setDebug.prediction ? `(${setDebug.prediction.x.toFixed(2)}, ${setDebug.prediction.y.toFixed(2)})／${setDebug.prediction.reachable ? "可達" : "不可達"}` : "—"}`,
+      `球 (${setDebug.ballX.toFixed(2)}, ${setDebug.ballY.toFixed(2)}, 高 ${setDebug.ballHeight.toFixed(2)})／剩餘 ${setDebug.remainingTime.toFixed(3)} 秒／${setDebug.descending ? "下降" : "非下降"}`,
+      `SET 偏差 X ${setDebug.horizontalOffset?.toFixed(2) ?? "—"}／Y ${setDebug.verticalOffset?.toFixed(2) ?? "—"}／正規距離 ${setDebug.normalizedDistance?.toFixed(3) ?? "—"}`,
+    );
     if (snapshot.thirdPass) {
       const third = snapshot.thirdPass;
       const attacker = snapshot.players.find((candidate) => candidate.id === third.assignedPlayerId);
@@ -228,9 +255,11 @@ export class TeamSimulatorRenderer {
       lines.push(
         `LEFT_LONG → ${player?.position ?? "球員"}（${assignment.assignedPlayerId}）`,
         `本 Rally 來源：${assignment.source?.rotation ?? "指定資料"}／${assignment.source?.playerSlot ?? "自訂"}／C1 已套用預覽`,
-        `READY (${assignment.readyPosition.x}, ${assignment.readyPosition.y}) 距離 ${assignment.readyDistance.toFixed(2)}`,
-        `ATTACK (${assignment.attackPosition.x}, ${assignment.attackPosition.y}) 距離 ${assignment.attackDistance.toFixed(2)}`,
-        ...(targetName ? [`目前目標座標 (${assignment.targetPosition.x.toFixed(2)}, ${assignment.targetPosition.y.toFixed(2)})`] : []),
+        `READY (${assignment.readyPosition.x}, ${assignment.readyPosition.y}) 距離 ${formatDebugDistance(assignment.readyDistance)}`,
+        `ATTACK (${assignment.attackPosition.x}, ${assignment.attackPosition.y}) 距離 ${formatDebugDistance(assignment.attackDistance)}`,
+        ...(targetName && assignment.targetPosition
+          ? [`目前目標座標 (${assignment.targetPosition.x.toFixed(2)}, ${assignment.targetPosition.y.toFixed(2)})`]
+          : ["目前目標座標：—"]),
         snapshot.simulationTime < assignment.movementBlockedUntil ? "接球動畫鎖定中：等待模擬時間解除" : "移動控制：固定時間步進",
       );
     } else {
@@ -364,10 +393,16 @@ export class TeamSimulatorRenderer {
     const avatarDisplaySize = snapshot.parameters.avatarSize * cameraView.displayScale;
     const ballDisplaySize = snapshot.presentation.ballDisplaySize * cameraView.displayScale;
 
+    const activePlayerIds = new Set(snapshot.players.map((player) => player.id));
+    for (const [playerId, elements] of this.playerElements) {
+      if (playerId !== snapshot.defense?.configuration?.playerId && !activePlayerIds.has(playerId)) {
+        elements.wrapper.hidden = true;
+      }
+    }
     snapshot.players.forEach((player) => {
       const { wrapper, motion, avatar } = this.ensurePlayerElement(player);
       wrapper.hidden = false;
-      wrapper.dataset.team = "HOME";
+      wrapper.dataset.team = player.team ?? "HOME";
       wrapper.style.left = toLeft(player.x);
       wrapper.style.top = toTop(player.y);
       wrapper.classList.toggle("is-primary-receiver", player.responsibility === "PRIMARY");
@@ -450,6 +485,11 @@ export class TeamSimulatorRenderer {
     const statusText = {
       READY: "點擊球場指定發球落點。",
       RUNNING: `主要接球員：${snapshot.primaryReceiverId ?? "分配中"}`,
+      FINISHING: getTeamSimulatorStatusText(snapshot),
+      ENDED: getTeamSimulatorStatusText(snapshot),
+      RALLY_ENDED: `Rally 結束：${snapshot.rallyResult?.reason ?? "未知"}／得分方 ${snapshot.rallyResult?.scoringTeam ?? "—"}`,
+      RECEIVE_ERROR_IN_FLIGHT: "RECEIVE ERROR：球員已碰球但失控，排球繼續自由飛行。",
+      RECEIVE_ERROR_COMPLETE: "RECEIVE ERROR：失控球已自然落地；本階段不啟動隊友追救。",
       AWAITING_PASS_TARGET_CONFIG: "一傳品質已判定，等待黃色／藍色區域座標設定。",
       PASS_IN_FLIGHT: `第二段一傳飛行中：${snapshot.receiveQuality?.quality ?? "尚未判定"}`,
       SECOND_TOUCH_COMPLETE: `第二次觸球完成：${snapshot.secondTouchPlayerId}`,
@@ -471,7 +511,7 @@ export class TeamSimulatorRenderer {
         ? "BAD 一傳已飛出場外，未啟動第二次觸球。"
         : `第二段一傳完成：${snapshot.receiveQuality?.quality ?? "尚未判定"}`,
       MISSED: "無人於落地前完成接球。",
-    }[snapshot.status];
+    }[snapshot.status] ?? `Rally 狀態：${snapshot.status}`;
     this.status.textContent = statusText;
     this.status.dataset.state = snapshot.status;
     this.telemetry.textContent = [
@@ -480,6 +520,7 @@ export class TeamSimulatorRenderer {
       `時間 ${snapshot.simulationTime.toFixed(2)} s`,
       `球 (${snapshot.ball.x.toFixed(0)}, ${snapshot.ball.y.toFixed(0)}, 高 ${snapshot.ball.height.toFixed(0)})`,
       `責任 ${snapshot.primaryReceiverId ?? "尚未分配"}`,
+      ...(snapshot.rallyPhase ? [`處理隊伍 ${snapshot.activeTeam}｜階段 ${snapshot.rallyPhase}｜觸球 HOME ${snapshot.teamTouches.HOME}／AWAY ${snapshot.teamTouches.AWAY}`] : []),
       `鏡頭 ${cameraView.mode}`,
     ].join("｜");
     const quality = snapshot.receiveQuality;
@@ -492,7 +533,7 @@ export class TeamSimulatorRenderer {
       ? [
         `第一觸球球員：${snapshot.firstTouchPlayerId ?? snapshot.primaryReceiverId ?? "尚未發生"}`,
         `第二觸球指定球員：${snapshot.secondTouchPlayerId ?? "尚未指定"}`,
-        `提前跑位目標：(${snapshot.secondTouchPrepareTarget.x.toFixed(2)}, ${snapshot.secondTouchPrepareTarget.y.toFixed(2)})`,
+        formatSecondTouchPrepareTarget(snapshot),
         secondTouchPlayer
           ? `第二觸球員目前目標：(${secondTouchPlayer.targetX.toFixed(2)}, ${secondTouchPlayer.targetY.toFixed(2)})`
           : "第二觸球員目前目標：無",
@@ -527,11 +568,18 @@ export class TeamSimulatorRenderer {
       : [
         `第一觸球球員：${snapshot.firstTouchPlayerId ?? "尚未發生"}`,
         `第二觸球指定球員：${snapshot.secondTouchPlayerId ?? "尚未指定"}`,
-        `提前跑位目標：(${snapshot.secondTouchPrepareTarget.x.toFixed(2)}, ${snapshot.secondTouchPrepareTarget.y.toFixed(2)})`,
+        formatSecondTouchPrepareTarget(snapshot),
         secondTouchPlayer
           ? `第二觸球員目前目標：(${secondTouchPlayer.targetX.toFixed(2)}, ${secondTouchPlayer.targetY.toFixed(2)})`
           : "第二觸球員目前目標：無",
-        "一傳品質：尚未判定",
+        snapshot.receiveOutcome?.result === "ERROR"
+          ? `接球結果：ERROR（成功率 ${(snapshot.receiveOutcome.probability * 100).toFixed(1)}%／抽選 ${(snapshot.receiveOutcome.successRoll * 100).toFixed(1)}%）`
+          : "一傳品質：尚未判定",
+        snapshot.receiveOutcome?.result === "ERROR"
+          ? `失控球路：${snapshot.receiveErrorTrajectory
+            ? `(${snapshot.receiveErrorTrajectory.target.x.toFixed(1)}, ${snapshot.receiveErrorTrajectory.target.y.toFixed(1)})／${snapshot.receiveErrorTrajectory.duration.toFixed(2)} 秒`
+            : "尚未建立"}`
+          : "接球結果：尚未判定",
         "第二觸球結果：尚未開始",
       ].join("\n");
     return true;

@@ -11,6 +11,8 @@ export const SINGLE_DEFENSE_DEFAULTS = Object.freeze({
   initialX: 600,
   initialY: 650,
   moveSpeed: 300,
+  receiveAbility: 70,
+  morale: 30,
 });
 
 export function validateSingleDefenseConfiguration(input = {}) {
@@ -26,6 +28,10 @@ export function validateSingleDefenseConfiguration(input = {}) {
   }
   if (!Number.isFinite(value.moveSpeed) || value.moveSpeed <= 0 || value.moveSpeed > 1600) {
     throw new RangeError("防守員移動速度須介於 0（不含）～1600 世界單位／秒。");
+  }
+  if (!Number.isInteger(value.receiveAbility) || value.receiveAbility < 1 || value.receiveAbility > 99
+    || !Number.isFinite(value.morale) || value.morale < 0 || value.morale > 99) {
+    throw new RangeError("單人防守需要 1～99 整數接球能力與 0～99 士氣。");
   }
   return Object.freeze({ ...value, playerId: value.playerId.trim() });
 }
@@ -49,7 +55,8 @@ export function createSingleDefender(configuration) {
     x: value.initialX,
     y: value.initialY,
     moveSpeed: value.moveSpeed,
-  }), { team: "AWAY", responsibility: "HOLD", touchEligible: false });
+  }), { team: "AWAY", responsibility: "HOLD", touchEligible: false,
+    receiveAbility: value.receiveAbility, morale: value.morale, receivePreparationTime: 0 });
 }
 
 export function updateSingleDefender({ ball, player, fixedStep, contactGeometry }) {
@@ -69,6 +76,9 @@ export function updateSingleDefender({ ball, player, fixedStep, contactGeometry 
   player.receiveDirection = getIncomingDirection(ball.target.x - ball.start.x);
   const previousPlayer = { x: player.x, y: player.y };
   stepSimulatorPlayer(player, fixedStep);
+  const idealDistance = Math.hypot(player.x - prediction.x, player.y - prediction.y);
+  player.receivePreparationTime = idealDistance <= contactGeometry.horizontalTolerance
+    ? player.receivePreparationTime + fixedStep : 0;
   return Object.freeze({ prediction, previousPlayer });
 }
 

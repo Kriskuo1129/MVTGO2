@@ -205,6 +205,9 @@ export class LeftLongReceiveSimulator extends SixPlayerReceiveSimulator {
     super.stepFixed();
     let transitioned = false;
     for (const event of this.events.slice(eventOffset)) {
+      if (event.type === "RECEIVE_RESOLVED" && event.result === "ERROR") {
+        this.clearAttackAssignment("RECEIVE_ERROR"); return;
+      }
       if (event.type === "RECEIVE_QUALITY_RESOLVED") {
         if (!["PERFECT", "NORMAL"].includes(event.quality)) { this.clearAttackAssignment("BAD_PASS"); return; }
         if (event.playerId === player.id) {
@@ -224,7 +227,7 @@ export class LeftLongReceiveSimulator extends SixPlayerReceiveSimulator {
         transitioned = true;
       }
     }
-    if (["MISSED", "SECOND_TOUCH_MISSED", "PASS_COMPLETE"].includes(this.status)) {
+    if (["MISSED", "RECEIVE_ERROR_COMPLETE", "SECOND_TOUCH_MISSED", "PASS_COMPLETE"].includes(this.status)) {
       this.clearAttackAssignment(this.status); return;
     }
     if (this.status === "PASS_IN_FLIGHT" && !transitioned) {

@@ -2,6 +2,8 @@ import { LeftLongReceiveSimulator } from "./left-long-simulator.js";
 import { TEAM_SIMULATOR_BALL_DISPLAY_SIZE } from "./team-simulator.js";
 import { ATTACK_MOTION_V1 } from "./attack-motion.js";
 import { createSimulatorBall, launchSimulatorBall, stepSimulatorBall, sampleSimulatorBall } from "./ball.js";
+import { getReceiveSpeedProfile } from "./receive-animation.js";
+import { createReceiveErrorTrajectory, RECEIVE_RESULTS, resolveReceiveContact } from "./receive-quality.js";
 import { SPIKE_COURT_V1, validateSpikeTarget, validateSpikeParameters } from "./spike-court.js";
 import { detectSpikeTermination, isSpikeExperimentRunning, sweepSpikeNet } from "./spike-flight.js";
 import {
@@ -43,6 +45,7 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
     this.defensePrediction = null;
     this.defenseResult = null;
     this.defenseContactGeometry = null;
+    this.defenseContactResolved = false;
     this.attackResolution = null;
     this.naturalSpike = null;
     this.bounceState = null;
@@ -172,6 +175,62 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
       actualSpeed: launch.actualSpeed }));
   }
 
+  resolveDefenseReceive({ contact, contactTime, incomingVelocity, natural }) {
+    const player = this.defensePlayer;
+    const incomingSpeedLevel = this.spikeFlight.parameters.speedLevel
+      ?? getReceiveSpeedProfile(this.spikeFlight.parameters.flightDuration).level;
+    const positionDistance = this.defensePrediction
+      ? Math.hypot(player.x - this.defensePrediction.x, player.y - this.defensePrediction.y) : 0;
+    const outcome = resolveReceiveContact({ contacted: true,
+      receiveAbility: player.receiveAbility, incomingSpeedLevel, positionDistance,
+      idealRange: this.defenseContactGeometry.horizontalTolerance,
+      preparationTime: player.receivePreparationTime, morale: player.morale, random: this.random });
+    Object.assign(this.ball, { x: contact.ballX, y: contact.ballY,
+      height: contact.ballHeight, inFlight: false, landed: false });
+    Object.assign(player, { x: contact.playerX, y: contact.playerY,
+      action: "RECEIVE", receiveDirection: contact.direction, isMoving: false, touchEligible: false });
+    this.defenseContactResolved = true;
+    const details = { playerId: player.id, time: contactTime, ballX: contact.ballX,
+      ballY: contact.ballY, ballHeight: contact.ballHeight, direction: contact.direction,
+      centerDistance: contact.centerDistance, effectiveAvatarRadius: contact.effectiveAvatarRadius,
+      ballRadius: contact.ballRadius, overlapDepth: contact.overlapDepth, receiveOutcome: outcome };
+    if (outcome.result === RECEIVE_RESULTS.SUCCESS) {
+      this.defenseResult = Object.freeze({ type: "DEFENSE_TOUCH", success: true, ...details,
+        quality: outcome.quality });
+      this.spikeFlight.status = "DEFENSE_TOUCH";
+      this.events.push(this.defenseResult);
+      this.status = this.attackMotion.jumpPhase === "LANDED"
+        ? "DEFENSE_TOUCH_COMPLETE" : "DEFENSE_TOUCH_LANDING";
+      return;
+    }
+    const trajectory = createReceiveErrorTrajectory({
+      start: { x: contact.ballX, y: contact.ballY, height: contact.ballHeight },
+      incomingVelocity,
+      random: this.random,
+    });
+    this.defenseResult = Object.freeze({ type: "DEFENSE_ERROR", success: false,
+      ...details, trajectory });
+    this.events.push(this.defenseResult);
+    if (natural) {
+      const duration = trajectory.duration;
+      this.naturalSpike.velocity = {
+        x: (trajectory.target.x - trajectory.start.x) / duration,
+        y: (trajectory.target.y - trajectory.start.y) / duration,
+        height: (this.spikeFlight.radius - trajectory.start.height
+          + 0.5 * NATURAL_SPIKE_PHYSICS_V1.gravity * duration ** 2) / duration,
+      };
+      this.ball.inFlight = true;
+      this.updateNaturalBallMetadata();
+    } else {
+      launchSimulatorBall(this.ball, { ...trajectory,
+        target: { ...trajectory.target, height: this.spikeFlight.radius } });
+      this.spikeFlight.startedAt = contactTime;
+      this.spikeFlight.target = this.ball.target;
+      this.spikeFlight.parameters = Object.freeze({ ...this.spikeFlight.parameters,
+        flightDuration: trajectory.duration, arcHeight: trajectory.arcHeight });
+    }
+  }
+
   updateNaturalBallMetadata() {
     const prediction = createNaturalPredictionBall(this.ball, this.naturalSpike.velocity,
       this.spikeFlight.radius, NATURAL_SPIKE_PHYSICS_V1);
@@ -268,7 +327,7 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
     const prediction = createNaturalPredictionBall(this.ball, state.velocity, radius, NATURAL_SPIKE_PHYSICS_V1);
     const previousBall = { x: this.ball.x, y: this.ball.y, height: this.ball.height,
       progress: 0, inFlight: true };
-    const defenseStep = this.defensePlayer
+    const defenseStep = this.defensePlayer && !this.defenseContactResolved
       ? updateSingleDefender({ ball: prediction, player: this.defensePlayer,
         fixedStep: this.fixedStep, contactGeometry: this.defenseContactGeometry }) : null;
     if (defenseStep) this.defensePrediction = defenseStep.prediction;
@@ -294,19 +353,9 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
     this.updateAttackPose(this.players.find((player) => player.id === this.attackMotion.playerId), this.simulationTime);
 
     if (defenseEvent < netEvent - 1e-10 && defenseEvent < groundEvent - 1e-10) {
-      Object.assign(this.ball, { x: defenseContact.ballX, y: defenseContact.ballY,
-        height: defenseContact.ballHeight, inFlight: false, landed: false });
-      Object.assign(this.defensePlayer, { x: defenseContact.playerX, y: defenseContact.playerY,
-        action: "RECEIVE", receiveDirection: defenseContact.direction, isMoving: false });
-      this.defenseResult = Object.freeze({ type: "DEFENSE_TOUCH", success: true,
-        playerId: this.defensePlayer.id, time: this.simulationTime - this.fixedStep + this.fixedStep * defenseEvent,
-        ballX: defenseContact.ballX, ballY: defenseContact.ballY, ballHeight: defenseContact.ballHeight,
-        direction: defenseContact.direction, centerDistance: defenseContact.centerDistance,
-        effectiveAvatarRadius: defenseContact.effectiveAvatarRadius, ballRadius: defenseContact.ballRadius,
-        overlapDepth: defenseContact.overlapDepth });
-      flight.status = "DEFENSE_TOUCH";
-      this.events.push(this.defenseResult);
-      this.status = this.attackMotion.jumpPhase === "LANDED" ? "DEFENSE_TOUCH_COMPLETE" : "DEFENSE_TOUCH_LANDING";
+      this.resolveDefenseReceive({ contact: defenseContact,
+        contactTime: this.simulationTime - this.fixedStep + this.fixedStep * defenseEvent,
+        incomingVelocity: previousVelocity, natural: true });
       return;
     }
 
@@ -329,7 +378,7 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
             groundHeight: null, radius, netCheck: flight.netCheck });
           this.events.push(this.spikeResult);
         }
-        if (this.defensePlayer) {
+        if (this.defensePlayer && !this.defenseContactResolved) {
           this.defensePlayer.action = "IDLE";
           this.defenseResult = Object.freeze({ type: "DEFENSE_MISSED", success: false,
             playerId: this.defensePlayer.id, time: this.spikeResult.time, reason: "SPIKE_NET" });
@@ -360,7 +409,7 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
     const from = this.ball.progress;
     const previousBall = { x: this.ball.x, y: this.ball.y, height: this.ball.height,
       progress: this.ball.progress, inFlight: this.ball.inFlight };
-    const defenseStep = this.defensePlayer
+    const defenseStep = this.defensePlayer && !this.defenseContactResolved
       ? updateSingleDefender({ ball: this.ball, player: this.defensePlayer,
         fixedStep: this.fixedStep, contactGeometry: this.defenseContactGeometry }) : null;
     if (defenseStep) this.defensePrediction = defenseStep.prediction;
@@ -384,20 +433,9 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
       ? (terminal.progress - from) / stepLength : Infinity;
     if (defenseContact?.contacted && defenseContact.stepProgress < terminalStepProgress - Number.EPSILON) {
       const contactTime = this.simulationTime - this.fixedStep + this.fixedStep * defenseContact.stepProgress;
-      Object.assign(this.ball, { x: defenseContact.ballX, y: defenseContact.ballY,
-        height: defenseContact.ballHeight, progress: from + stepLength * defenseContact.stepProgress,
-        elapsed: this.ball.duration * (from + stepLength * defenseContact.stepProgress), inFlight: false, landed: false });
-      Object.assign(this.defensePlayer, { x: defenseContact.playerX, y: defenseContact.playerY,
-        action: "RECEIVE", receiveDirection: defenseContact.direction, isMoving: false });
-      this.defenseResult = Object.freeze({ type: "DEFENSE_TOUCH", success: true,
-        playerId: this.defensePlayer.id, time: contactTime, ballX: defenseContact.ballX,
-        ballY: defenseContact.ballY, ballHeight: defenseContact.ballHeight,
-        direction: defenseContact.direction, centerDistance: defenseContact.centerDistance,
-        effectiveAvatarRadius: defenseContact.effectiveAvatarRadius, ballRadius: defenseContact.ballRadius,
-        overlapDepth: defenseContact.overlapDepth });
-      flight.status = "DEFENSE_TOUCH";
-      this.events.push(this.defenseResult);
-      this.status = this.attackMotion.jumpPhase === "LANDED" ? "DEFENSE_TOUCH_COMPLETE" : "DEFENSE_TOUCH_LANDING";
+      this.resolveDefenseReceive({ contact: defenseContact, contactTime,
+        incomingVelocity: { x: (this.ball.x - previousBall.x) / this.fixedStep,
+          y: (this.ball.y - previousBall.y) / this.fixedStep }, natural: false });
       return;
     }
     const planeProgress = (court.netX - this.ball.start.x) / (this.ball.target.x - this.ball.start.x);
@@ -425,7 +463,7 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
     this.spikeResult = Object.freeze({ type: terminal.type, reason: terminal.type,
       time: flight.startedAt + this.ball.elapsed, ballX: this.ball.x, ballY: this.ball.y, ballHeight: this.ball.height,
       groundHeight: terminal.type === "SPIKE_NET" ? null : 0, radius, netCheck: flight.netCheck });
-    if (this.defensePlayer) {
+    if (this.defensePlayer && !this.defenseContactResolved) {
       this.defensePlayer.action = "IDLE";
       this.defensePlayer.touchEligible = false;
       this.defensePlayer.responsibility = "HOLD";
