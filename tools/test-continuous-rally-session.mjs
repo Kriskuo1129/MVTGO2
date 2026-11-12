@@ -43,5 +43,9 @@ assert.equal(restart.rallyNumber, 1);
 assert.equal(restart.servingTeam, "AWAY");
 assert.equal(restart.simulator.ballFlightId, 0, "新 Rally 準備階段不可殘留上一球 flight ID。");
 assert.equal(restart.simulator.events.some((event) => ["RECEIVE_TOUCH", "SECOND_TOUCH", "THIRD_TOUCH"].includes(event.type)), false);
+restart.stop();
+assert.equal(restart.active, false);
+restart.resume();
+assert.equal(restart.active, true, "暫停後必須能繼續同一個 Session。");
 
 console.log("PASS: 12+ sequential rallies; exactly-once scoring; scorer serves next; deterministic seed sequence; HOME/AWAY service ownership; 30/60/144 FPS; clean restart state.");

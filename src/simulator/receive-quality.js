@@ -139,14 +139,22 @@ export function resolveReceiveContact({ contacted, random = Math.random, ...inpu
 export function createReceiveErrorTrajectory({
   start,
   incomingVelocity,
+  receivingTeam,
   random = Math.random,
   config = RECEIVE_SUCCESS_CONFIG.errorFlight,
 }) {
   if (![start?.x, start?.y, start?.height, incomingVelocity?.x, incomingVelocity?.y]
     .every(Number.isFinite)) throw new TypeError("失控球路需要有效的接觸點與來球速度。");
+  if (receivingTeam !== undefined && !["HOME", "AWAY"].includes(receivingTeam)) {
+    throw new RangeError("失控球路的接球隊伍必須為 HOME 或 AWAY。");
+  }
   const incomingAngle = Math.atan2(incomingVelocity.y, incomingVelocity.x);
   const deflection = (readRandom(random) - 0.5) * config.directionSpreadRadians;
-  const angle = incomingAngle + Math.PI + deflection;
+  // 正式連續 Rally 的失控球固定往接球員後場逸出：HOME 向左、AWAY 向右。
+  // 未提供隊伍時保留舊實驗的來球反射規則，避免改變獨立原型既有資料契約。
+  const backwardAngle = receivingTeam === "HOME" ? Math.PI
+    : receivingTeam === "AWAY" ? 0 : incomingAngle + Math.PI;
+  const angle = backwardAngle + deflection;
   const distance = config.minimumDistance
     + readRandom(random) * (config.maximumDistance - config.minimumDistance);
   const duration = config.minimumDuration

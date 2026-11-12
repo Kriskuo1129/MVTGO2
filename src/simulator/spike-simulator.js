@@ -206,6 +206,7 @@ export class SpikeReceiveSimulator extends LeftLongReceiveSimulator {
     const trajectory = createReceiveErrorTrajectory({
       start: { x: contact.ballX, y: contact.ballY, height: contact.ballHeight },
       incomingVelocity,
+      receivingTeam: player.team,
       random: this.random,
     });
     this.defenseResult = Object.freeze({ type: "DEFENSE_ERROR", success: false,

@@ -29,6 +29,10 @@ export function isNewContinuousBallFlight(snapshot, lastFollowedBallFlightId) {
     && snapshot.ballFlightId !== lastFollowedBallFlightId;
 }
 
+export function getPlayerAvatarLabel(player) {
+  return player?.job ?? player?.position ?? "?";
+}
+
 function formatDebugDistance(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)} 世界單位` : "—";
 }
@@ -47,12 +51,13 @@ export function resolvePlayerTouchAnimation(player, snapshot) {
 }
 
 export class TeamSimulatorRenderer {
-  constructor({ root, onTargetSelected }) {
+  constructor({ root, onTargetSelected, onSnapshot = null }) {
     if (!root || typeof onTargetSelected !== "function") {
       throw new TypeError("六人 Simulator Renderer 需要根節點與落點回呼。");
     }
     this.root = root;
     this.onTargetSelected = onTargetSelected;
+    this.onSnapshot = typeof onSnapshot === "function" ? onSnapshot : null;
     this.viewport = root.querySelector("#team-simulator-viewport");
     this.world = root.querySelector("#team-simulator-world");
     this.ball = root.querySelector("#team-simulator-ball");
@@ -300,8 +305,7 @@ export class TeamSimulatorRenderer {
     motion.className = "simulator-player__motion";
     const fallback = document.createElement("span");
     fallback.className = "simulator-player__fallback";
-    fallback.textContent = player.team
-      ? `${player.team === "HOME" ? "H" : "A"}·${player.position}` : player.position;
+    fallback.textContent = getPlayerAvatarLabel(player);
     const image = document.createElement("img");
     image.className = "simulator-player__photo";
     image.alt = "";
@@ -397,6 +401,7 @@ export class TeamSimulatorRenderer {
 
   render(snapshot) {
     this.lastSnapshot = snapshot;
+    this.onSnapshot?.(snapshot);
     if (snapshot.session) {
       this.root.querySelector("#continuous-score-home").textContent = String(snapshot.session.scores.HOME);
       this.root.querySelector("#continuous-score-away").textContent = String(snapshot.session.scores.AWAY);
@@ -427,7 +432,7 @@ export class TeamSimulatorRenderer {
       }
     }
     snapshot.players.forEach((player) => {
-      const { wrapper, motion, avatar } = this.ensurePlayerElement(player);
+      const { wrapper, motion, avatar, fallback } = this.ensurePlayerElement(player);
       wrapper.hidden = false;
       if (player.team) wrapper.dataset.team = player.team;
       else delete wrapper.dataset.team;
@@ -437,6 +442,7 @@ export class TeamSimulatorRenderer {
       wrapper.classList.toggle("is-touch-eligible", player.touchEligible);
       wrapper.dataset.task = player.task;
       wrapper.title = `${player.team ?? "實驗"}｜${player.position}｜${player.rotationPosition}｜${player.task}`;
+      fallback.textContent = getPlayerAvatarLabel(player);
       avatar.style.width = `${avatarDisplaySize}px`;
       avatar.style.height = `${avatarDisplaySize}px`;
       const { isReceiving, isSuccessfulSet, profile: animationProfile,

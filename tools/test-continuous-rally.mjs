@@ -89,6 +89,17 @@ for (let index = 1; index < touches.length; index += 1) {
 for (const event of first.events.filter((entry) => entry.type === "RECEIVE_ERROR")) {
   assert.ok(event.trajectory.duration > 0 && event.trajectory.arcHeight > 0);
 }
+for (const [seed, team, direction] of [[9, "HOME", -1], [12, "AWAY", 1]]) {
+  const errorSnapshot = run({ seed }).snapshot;
+  const errorEvent = errorSnapshot.events.find((event) => event.type === "RECEIVE_ERROR"
+    && event.team === team);
+  assert.ok(errorEvent, `Seed ${seed} 必須重現 ${team} RECEIVE_ERROR。`);
+  assert.equal(Math.sign(errorEvent.trajectory.target.x - errorEvent.trajectory.start.x), direction,
+    `${team} 失控球必須往接球員後方飛。`);
+  assert.equal(errorSnapshot.rallyResult.reason, "RECEIVE_ERROR_LANDED");
+  assert.equal(errorSnapshot.rallyResult.scoringTeam, team === "HOME" ? "AWAY" : "HOME",
+    "失誤球方向不得改變原本得分方。 ");
+}
 const seed2 = run({ seed: 2 }).snapshot;
 assert.equal(seed2.status, "ENDED", "真實跑位後 Seed 2 仍須安全完成，不要求保留舊版強制多拍結果。");
 const missedSet = run({ seed: 5 }).snapshot;

@@ -54,6 +54,14 @@ const trajectoryB = createReceiveErrorTrajectory({ ...errorInput, random: create
 assert.deepEqual(trajectoryA, trajectoryB);
 assert.ok(trajectoryA.duration > 0 && trajectoryA.arcHeight > 0);
 assert.notEqual(trajectoryA.target.x, 0);
+const homeError = createReceiveErrorTrajectory({ ...errorInput, receivingTeam: "HOME",
+  random: createSeededRandom(1234) });
+const awayError = createReceiveErrorTrajectory({ ...errorInput, receivingTeam: "AWAY",
+  random: createSeededRandom(1234) });
+assert.ok(homeError.target.x < homeError.start.x, "HOME 失控球必須往左後方飛。 ");
+assert.ok(awayError.target.x > awayError.start.x, "AWAY 失控球必須往右後方飛。 ");
+assert.deepEqual(homeError.start, errorInput.start, "失控球必須從真實接觸點連續起飛。 ");
+assert.deepEqual(awayError.start, errorInput.start, "失控球必須從真實接觸點連續起飛。 ");
 
 function runError(fps) {
   const simulator = new SixPlayerReceiveSimulator({ random: () => 0.999 });

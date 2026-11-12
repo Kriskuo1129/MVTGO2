@@ -27,11 +27,19 @@ const RIGHT_SIDE_CONFIG = Object.freeze({
 });
 
 const mirror = (point) => Object.freeze({ x: SIMULATOR_WORLD.width - point.x, y: point.y });
+const attackTypeForTeam = (attackType, team) => {
+  if (team !== "HOME") return attackType;
+  if (attackType === ATTACK_TYPES.LEFT_LONG) return ATTACK_TYPES.RIGHT_LONG;
+  if (attackType === ATTACK_TYPES.RIGHT_LONG) return ATTACK_TYPES.LEFT_LONG;
+  return attackType;
+};
 
 export function getR1AttackConfigurations(team) {
   if (!["HOME", "AWAY"].includes(team)) throw new RangeError("R1 攻擊配置需要 HOME 或 AWAY。");
   return Object.freeze(Object.fromEntries(Object.entries(RIGHT_SIDE_CONFIG).map(([job, entry]) => [job,
     Object.freeze({ ...entry,
+      // 左右以攻擊方自身視角命名；HOME 面向相反，鏡像座標時同步交換名稱。
+      attackType: attackTypeForTeam(entry.attackType, team),
       readyPosition: team === "AWAY" ? entry.readyPosition : mirror(entry.readyPosition),
       attackPosition: team === "AWAY" ? entry.attackPosition : mirror(entry.attackPosition),
     })])));

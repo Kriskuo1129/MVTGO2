@@ -19,6 +19,10 @@ for (const job of ATTACK_JOBS) {
   assert.equal(home.readyPosition.x + away.readyPosition.x, 2280);
   assert.equal(home.attackPosition.x + away.attackPosition.x, 2280);
 }
+assert.equal(getR1AttackConfigurations("AWAY").OH1.attackType, "LEFT_LONG");
+assert.equal(getR1AttackConfigurations("AWAY").OP.attackType, "RIGHT_LONG");
+assert.equal(getR1AttackConfigurations("HOME").OH1.attackType, "RIGHT_LONG");
+assert.equal(getR1AttackConfigurations("HOME").OP.attackType, "LEFT_LONG");
 
 const forced = createR1AttackPlan({ team: "AWAY", revision: 1,
   firstTouchPlayerId: "AWAY-S", firstTouchJob: "S" });

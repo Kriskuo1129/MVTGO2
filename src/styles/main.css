@@ -1305,6 +1305,54 @@ tbody tr:hover {
 }
 .continuous-rally-score p { margin: 0; }
 .continuous-rally-score div { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.continuous-rally-controls { align-items: end; }
+.continuous-rally-controls label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 7rem;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+.continuous-rally-controls input,
+.continuous-rally-controls select { min-width: 0; }
+
+.rally-event-log-panel {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--color-line);
+  background: #080808;
+}
+.rally-event-log-panel > header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: start;
+}
+.rally-event-log-panel h2,
+.rally-event-log-panel p { margin: 0; }
+.rally-event-log-panel header p { color: var(--color-muted); font-size: 0.76rem; }
+.rally-event-log-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+.rally-event-log-actions label { color: var(--color-muted); font-size: 0.75rem; }
+#rally-event-log {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 13rem;
+  max-height: 24rem;
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  border: 1px solid #ffffff26;
+  background: #000;
+  color: #f3f3f3;
+  font: 0.76rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
+#rally-event-log-message { min-height: 1.2em; color: var(--color-muted); font-size: 0.75rem; }
 
 .simulator-player__motion {
   display: grid;

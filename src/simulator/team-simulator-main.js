@@ -20,6 +20,7 @@ import { ContinuousFormationEditor } from "./continuous-formation-editor.js";
 import { ContinuousRallySession } from "./continuous-rally-session.js";
 import { getAppearancePlayerIds, loadContinuousFormation,
   saveContinuousFormation } from "./continuous-rally-formation.js";
+import { formatRallyEventLog, RallyEventLogStore } from "./rally-event-log.js";
 
 const PARAMETER_FIELDS = Object.freeze({
   avatarSize: "team-simulator-avatar-size",
@@ -86,6 +87,8 @@ function organizeTeamSimulatorLayout(root) {
   const clickControls = root.querySelector("#team-simulator-click-controls");
   const viewport = root.querySelector("#team-simulator-viewport");
   const output = root.querySelector(".simulator-output");
+  const rallyControls = root.querySelector(".continuous-rally-score");
+  const rallyLog = root.querySelector("#rally-event-log-panel");
   const parameters = createCollapsibleSection("team-simulator-panel team-simulator-parameters-panel", "實驗參數：進攻、扣球與單人防守");
   const debug = createCollapsibleSection("team-simulator-panel team-simulator-debug-panel", "詳細 Debug");
   const debugContent = document.createElement("div");
@@ -110,7 +113,7 @@ function organizeTeamSimulatorLayout(root) {
   debugNodes.forEach((node) => debugContent.append(node));
   debug.append(debugContent);
   editors.append(zoneEditor, attackEditor, formationEditor);
-  toolbar.after(clickControls, viewport, output, parameters, debug, editors);
+  toolbar.after(rallyControls, clickControls, viewport, output, rallyLog, parameters, debug, editors);
 }
 
 export function createTeamSimulatorApp({ root, onExit }) {
@@ -123,6 +126,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const continuousServingTeam = root.querySelector("#continuous-serving-team");
   const continuousServeType = root.querySelector("#continuous-serve-type");
   const continuousServeAbility = root.querySelector("#continuous-serve-ability");
+  const continuousRallySeed = root.querySelector("#continuous-rally-seed");
   const attackEnabled = root.querySelector("#left-long-enabled");
   const attackRotation = root.querySelector("#left-long-rotation");
   const attackPlayer = root.querySelector("#left-long-player");
@@ -201,6 +205,12 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const sessionStart = root.querySelector("#continuous-session-start");
   const sessionStop = root.querySelector("#continuous-session-stop");
   const sessionRestart = root.querySelector("#continuous-session-restart");
+  const rallyLogOutput = root.querySelector("#rally-event-log");
+  const rallyLogCopy = root.querySelector("#rally-event-log-copy");
+  const rallyLogClear = root.querySelector("#rally-event-log-clear");
+  const rallyLogAutoscroll = root.querySelector("#rally-event-log-autoscroll");
+  const rallyLogMessage = root.querySelector("#rally-event-log-message");
+  const rallyLogStore = new RallyEventLogStore();
   const zoneEditButton = root.querySelector("#pass-target-zone-edit");
   const attackEditButton = root.querySelector("#attack-position-edit");
   const attackCloseButton = root.querySelector("#attack-position-close");
@@ -243,6 +253,12 @@ export function createTeamSimulatorApp({ root, onExit }) {
 
   const renderer = new TeamSimulatorRenderer({
     root,
+    onSnapshot(snapshot) {
+      if (!snapshot?.events) return;
+      const entries = rallyLogStore.consume(snapshot);
+      rallyLogOutput.textContent = entries.length ? formatRallyEventLog(entries) : "尚無 Rally 事件。";
+      if (rallyLogAutoscroll.checked) rallyLogOutput.scrollTop = rallyLogOutput.scrollHeight;
+    },
     onTargetSelected(target) {
       try {
         if (continuousRallyEnabled.checked) {
@@ -603,20 +619,46 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const startContinuousSession = () => {
     renderer.stop();
     continuousRallyEnabled.checked = true;
+    continuousSession.baseSeed = Number(continuousRallySeed.value) >>> 0;
+    rallyLogStore.beginSession();
     continuousSimulator.configure(readParameters());
     continuousSimulator.configureFormation(continuousFormation);
     continuousSession.start({ firstServingTeam: continuousServingTeam.value,
       serveType: continuousServeType.value, serveAbility: Number(continuousServeAbility.value) });
     attackMessage.textContent = "連續 Rally 測試進行中；每球完整收尾後自動計分並由得分方發下一球。";
+    sessionStop.textContent = "暫停";
     renderer.play(continuousSession);
   };
-  const stopContinuousSession = () => {
-    continuousSession.stop();
-    renderer.stop();
-    renderer.renderWhenReady(continuousSession.getSnapshot());
-    attackMessage.textContent = "連續 Rally 測試已停止，比分與最後畫面保留。";
+  const toggleContinuousSessionPause = () => {
+    if (continuousSession.active) {
+      continuousSession.stop();
+      renderer.stop();
+      renderer.renderWhenReady(continuousSession.getSnapshot());
+      sessionStop.textContent = "繼續";
+      attackMessage.textContent = "連續 Rally 已暫停，比分、事件與最後畫面保留。";
+    } else if (continuousSession.rallyNumber > 0) {
+      continuousSession.resume();
+      sessionStop.textContent = "暫停";
+      attackMessage.textContent = "連續 Rally 已繼續。";
+      renderer.play(continuousSession);
+    }
   };
   const restartContinuousSession = () => startContinuousSession();
+  const clearRallyLog = () => {
+    rallyLogStore.clear();
+    rallyLogOutput.textContent = "尚無 Rally 事件。";
+    rallyLogMessage.textContent = "LOG 已清除。";
+  };
+  const copyRallyLog = async () => {
+    try {
+      const text = formatRallyEventLog(rallyLogStore.entries);
+      if (!text) throw new Error("目前沒有可複製的事件。");
+      await navigator.clipboard.writeText(text);
+      rallyLogMessage.textContent = "完整 LOG 已複製。";
+    } catch (error) {
+      rallyLogMessage.textContent = `複製失敗：${error.message}`;
+    }
+  };
   const handleCopyZones = async () => {
     try {
       await zoneEditor.copyCoordinates();
@@ -668,8 +710,10 @@ export function createTeamSimulatorApp({ root, onExit }) {
   formationCloseButton.addEventListener("click", closeFormationEditor);
   continuousRallyEnabled.addEventListener("change", handleContinuousModeChange);
   sessionStart.addEventListener("click", startContinuousSession);
-  sessionStop.addEventListener("click", stopContinuousSession);
+  sessionStop.addEventListener("click", toggleContinuousSessionPause);
   sessionRestart.addEventListener("click", restartContinuousSession);
+  rallyLogCopy.addEventListener("click", copyRallyLog);
+  rallyLogClear.addEventListener("click", clearRallyLog);
   [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.addEventListener("change", refreshAttackConfiguration));
   spikeEnabled.addEventListener("change", refreshSpikeTarget);
   spikeFlightMode.addEventListener("change", refreshSpikeTarget);
@@ -736,8 +780,10 @@ export function createTeamSimulatorApp({ root, onExit }) {
       formationCloseButton.removeEventListener("click", closeFormationEditor);
       continuousRallyEnabled.removeEventListener("change", handleContinuousModeChange);
       sessionStart.removeEventListener("click", startContinuousSession);
-      sessionStop.removeEventListener("click", stopContinuousSession);
+      sessionStop.removeEventListener("click", toggleContinuousSessionPause);
       sessionRestart.removeEventListener("click", restartContinuousSession);
+      rallyLogCopy.removeEventListener("click", copyRallyLog);
+      rallyLogClear.removeEventListener("click", clearRallyLog);
       [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.removeEventListener("change", refreshAttackConfiguration));
       spikeEnabled.removeEventListener("change", refreshSpikeTarget);
       spikeFlightMode.removeEventListener("change", refreshSpikeTarget);

@@ -38,6 +38,7 @@ export class ContinuousRallySession {
   }
 
   stop() { this.active = false; return this.getSnapshot(); }
+  resume() { this.active = true; return this.getSnapshot(); }
   restart(options = {}) { return this.start(options); }
 
   startNextRally() {

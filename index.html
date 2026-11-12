@@ -79,7 +79,7 @@
         <header class="simulator-header">
           <div>
             <p class="eyebrow">SIMULATOR LAB</p>
-            <h1 id="team-simulator-title" tabindex="-1">六人接發球實驗</h1>
+            <h1 id="team-simulator-title" tabindex="-1">Rally Debug 工作台</h1>
           </div>
           <button id="team-simulator-back" class="secondary-button" type="button">返回首頁</button>
         </header>
@@ -97,9 +97,6 @@
           </label>
           <button id="team-simulator-settings" class="secondary-button" type="button">測試設定</button>
           <label><input id="continuous-rally-enabled" type="checkbox" />雙方連續攻防</label>
-          <label>發球方<select id="continuous-serving-team"><option value="HOME">HOME</option><option value="AWAY">AWAY</option></select></label>
-          <label>發球方式<select id="continuous-serve-type"><option value="STANDING">STANDING 一般發球</option><option value="JUMP">JUMP 跳發</option></select></label>
-          <label>發球能力<input id="continuous-serve-ability" type="number" min="1" max="99" step="1" value="60" /></label>
           <button id="continuous-formation-edit" class="secondary-button" type="button" aria-pressed="false">編輯站位</button>
           <button id="pass-target-zone-edit" class="secondary-button" type="button">編輯一傳區域</button>
           <button id="attack-position-edit" class="secondary-button" type="button" aria-pressed="false">編輯進攻站位</button>
@@ -113,10 +110,14 @@
         <section class="continuous-rally-score" aria-label="連續 Rally 測試計分">
           <p><strong>HOME <span id="continuous-score-home">0</span>：<span id="continuous-score-away">0</span> AWAY</strong>
             ｜Rally <span id="continuous-rally-number">0</span>｜發球方 <span id="continuous-current-server">HOME</span></p>
-          <div>
-            <button id="continuous-session-start" class="primary-button" type="button">開始連續測試</button>
-            <button id="continuous-session-stop" class="secondary-button" type="button">停止</button>
-            <button id="continuous-session-restart" class="secondary-button" type="button">重新開始</button>
+          <div class="continuous-rally-controls">
+            <label>發球方<select id="continuous-serving-team"><option value="HOME">HOME</option><option value="AWAY">AWAY</option></select></label>
+            <label>Seed<input id="continuous-rally-seed" type="number" step="1" value="20261112" /></label>
+            <label>發球方式<select id="continuous-serve-type"><option value="STANDING">STANDING 一般發球</option><option value="JUMP">JUMP 跳發</option></select></label>
+            <label>發球能力<input id="continuous-serve-ability" type="number" min="1" max="99" step="1" value="60" /></label>
+            <button id="continuous-session-start" class="primary-button" type="button">開始</button>
+            <button id="continuous-session-stop" class="secondary-button" type="button">暫停</button>
+            <button id="continuous-session-restart" class="secondary-button" type="button">重置</button>
           </div>
         </section>
 
@@ -313,6 +314,20 @@
           <p id="team-simulator-telemetry">球路 HIGH_ARC｜時間 0.00 s｜責任 尚未分配</p>
           <pre id="team-simulator-debug" class="team-simulator-debug">一傳品質：尚未判定</pre>
         </div>
+
+        <section id="rally-event-log-panel" class="rally-event-log-panel" aria-labelledby="rally-event-log-title">
+          <header>
+            <div><h2 id="rally-event-log-title">Rally Event Log</h2>
+              <p>資料直接來自固定步進 Simulator 的決策與物理事件。</p></div>
+            <div class="rally-event-log-actions">
+              <label><input id="rally-event-log-autoscroll" type="checkbox" checked />自動捲動到底部</label>
+              <button id="rally-event-log-copy" class="secondary-button" type="button">複製 LOG</button>
+              <button id="rally-event-log-clear" class="secondary-button" type="button">清除 LOG</button>
+            </div>
+          </header>
+          <pre id="rally-event-log" tabindex="0">尚無 Rally 事件。</pre>
+          <p id="rally-event-log-message" role="status"></p>
+        </section>
 
         <dialog id="team-simulator-settings-dialog" class="team-simulator-settings" aria-labelledby="team-simulator-settings-title">
           <div class="team-simulator-settings__header">

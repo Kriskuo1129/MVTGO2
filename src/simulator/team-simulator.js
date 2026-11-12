@@ -451,6 +451,7 @@ export class SixPlayerReceiveSimulator {
         this.receiveErrorTrajectory = createReceiveErrorTrajectory({
           start: { x: this.ball.x, y: this.ball.y, height: this.ball.height },
           incomingVelocity,
+          receivingTeam: "AWAY",
           random: this.random,
         });
         launchSimulatorBall(this.ball, this.receiveErrorTrajectory);

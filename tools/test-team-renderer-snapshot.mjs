@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { ContinuousRallySimulator } from "../src/simulator/continuous-rally-simulator.js";
 import {
   formatSecondTouchPrepareTarget,
+  getPlayerAvatarLabel,
   getTeamSimulatorStatusText,
   isNewContinuousBallFlight,
   TeamSimulatorRenderer,
@@ -10,6 +11,8 @@ import { SixPlayerReceiveSimulator } from "../src/simulator/team-simulator.js";
 import { isSpikeExperimentRunning } from "../src/simulator/spike-flight.js";
 
 const continuous = new ContinuousRallySimulator({ seed: 2 });
+assert.equal(getPlayerAvatarLabel({ team: "HOME", job: "OH1", position: "OH1" }), "OH1");
+assert.equal(getPlayerAvatarLabel({ team: "AWAY", job: "MB2", position: "MB2" }), "MB2");
 continuous.launch({ x: 1820, y: 450 });
 for (let step = 0; step < 240
   && !continuous.events.some((event) => event.type === "SERVE_CONTACT"); step += 1) {
@@ -103,7 +106,7 @@ assert.ok(stageRun.flights.some((flight) => flight.targetX > flight.startX));
 assert.ok(stageRun.flights.some((flight) => flight.targetX < flight.startX),
   "HOME／AWAY 來回球路必須同時包含左右兩種 Camera 方向。");
 
-const errorRun = renderContinuousStages({ seed: 6 });
+const errorRun = renderContinuousStages({ seed: 9 });
 assert.ok(errorRun.phases.has("ERROR_FLIGHT"), "Renderer 必須處理 ERROR_FLIGHT 階段。");
 
 const assignment = stageRun.finalSnapshot.attackAssignment;
