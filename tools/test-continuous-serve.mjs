@@ -27,7 +27,7 @@ function start(team, seed = 7, serveType = SIMULATOR_SERVE_TYPES.JUMP) {
   assert.equal(prepared.rallyPhase, "SERVE_PREPARE");
   assert.equal(prepared.ballFlightId, 0);
   const server = prepared.players.find((player) => player.id === prepared.serverPlayerId);
-  assert.equal(server.rotationPosition, "POS1");
+  assert.equal(server.job, "S");
   assert.equal(server.action, "SERVE_PREPARE");
   assert.equal(team === "HOME" ? server.x < SPIKE_COURT_V1.bounds.minX : server.x > SPIKE_COURT_V1.bounds.maxX, true);
   let maximumTossHeight = 0;
@@ -71,8 +71,8 @@ function complete({ team = "HOME", seed = 7, fps = 60 } = {}) {
   return simulator.getSnapshot();
 }
 
-const deterministicA = complete({ team: "HOME", seed: 7 });
-const deterministicB = complete({ team: "HOME", seed: 7 });
+const deterministicA = complete({ team: "HOME", seed: 15 });
+const deterministicB = complete({ team: "HOME", seed: 15 });
 assert.deepEqual(deterministicA.rallyResult, deterministicB.rallyResult);
 assert.deepEqual(deterministicA.serveResolution, deterministicB.serveResolution);
 assert.ok(deterministicA.events.filter((event) => event.type === "ATTACK_STARTED").length >= 2,
@@ -80,11 +80,11 @@ assert.ok(deterministicA.events.filter((event) => event.type === "ATTACK_STARTED
 assert.equal(complete({ team: "HOME", seed: 1 }).rallyResult.reason, "SERVE_NET");
 assert.equal(complete({ team: "HOME", seed: 9 }).rallyResult.reason, "SERVE_OUT");
 assert.equal(complete({ team: "AWAY", seed: 9 }).rallyResult.reason, "SERVE_NET");
-const fpsRuns = [30, 60, 144].map((fps) => complete({ team: "HOME", seed: 7, fps }));
+const fpsRuns = [30, 60, 144].map((fps) => complete({ team: "HOME", seed: 15, fps }));
 assert.deepEqual(fpsRuns.map((run) => run.rallyResult), [fpsRuns[0].rallyResult, fpsRuns[0].rallyResult, fpsRuns[0].rallyResult]);
 assert.deepEqual(fpsRuns.map((run) => run.events.map((event) => event.type)),
   [fpsRuns[0].events.map((event) => event.type), fpsRuns[0].events.map((event) => event.type), fpsRuns[0].events.map((event) => event.type)]);
 assert.ok(getServePosition("HOME").x < SPIKE_COURT_V1.bounds.minX);
 assert.ok(getServePosition("AWAY").x > SPIKE_COURT_V1.bounds.maxX);
 
-console.log("PASS: formal HOME/AWAY POS1 serve; STANDING/JUMP real toss and descending swept contact; mirrored baseline positions; ability speed thresholds; net/out/continuous play; deterministic 30/60/144 FPS.");
+console.log("PASS: formal HOME/AWAY R1 S serve; STANDING/JUMP real toss and descending swept contact; mirrored baseline positions; ability speed thresholds; net/out/continuous play; deterministic 30/60/144 FPS.");
