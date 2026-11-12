@@ -97,6 +97,10 @@
           </label>
           <button id="team-simulator-settings" class="secondary-button" type="button">測試設定</button>
           <label><input id="continuous-rally-enabled" type="checkbox" />雙方連續攻防</label>
+          <label>發球方<select id="continuous-serving-team"><option value="HOME">HOME</option><option value="AWAY">AWAY</option></select></label>
+          <label>發球方式<select id="continuous-serve-type"><option value="STANDING">STANDING 一般發球</option><option value="JUMP">JUMP 跳發</option></select></label>
+          <label>發球能力<input id="continuous-serve-ability" type="number" min="1" max="99" step="1" value="60" /></label>
+          <button id="continuous-formation-edit" class="secondary-button" type="button" aria-pressed="false">編輯站位</button>
           <button id="pass-target-zone-edit" class="secondary-button" type="button">編輯一傳區域</button>
           <button id="attack-position-edit" class="secondary-button" type="button" aria-pressed="false">編輯進攻站位</button>
           <button id="team-simulator-reset" class="secondary-button" type="button">重設參數</button>
@@ -104,6 +108,16 @@
 
         <section id="team-simulator-click-controls" class="team-simulator-click-controls" aria-label="球場點擊操作">
           <p id="team-simulator-click-hint">點擊球場設定發球落點並啟動 Rally。</p>
+        </section>
+
+        <section class="continuous-rally-score" aria-label="連續 Rally 測試計分">
+          <p><strong>HOME <span id="continuous-score-home">0</span>：<span id="continuous-score-away">0</span> AWAY</strong>
+            ｜Rally <span id="continuous-rally-number">0</span>｜發球方 <span id="continuous-current-server">HOME</span></p>
+          <div>
+            <button id="continuous-session-start" class="primary-button" type="button">開始連續測試</button>
+            <button id="continuous-session-stop" class="secondary-button" type="button">停止</button>
+            <button id="continuous-session-restart" class="secondary-button" type="button">重新開始</button>
+          </div>
         </section>
 
         <section id="pass-target-zone-editor" class="pass-target-zone-editor" aria-labelledby="pass-target-zone-title" hidden>
@@ -243,6 +257,21 @@
           </div>
         </section>
 
+        <section id="continuous-formation-editor" class="pass-target-zone-editor" aria-labelledby="continuous-formation-title" hidden>
+          <div class="pass-target-zone-editor__header">
+            <div><h2 id="continuous-formation-title">雙方 12 人初始站位</h2>
+              <p>拖曳球員或輸入 2280×900 世界座標。球員中心會限制於各自半場的有效球場範圍，設定自動儲存於本機。</p></div>
+            <button id="continuous-formation-close" class="secondary-button" type="button">關閉編輯</button>
+          </div>
+          <div class="continuous-formation-fields">
+            <label>球員<select id="continuous-formation-player"></select></label>
+            <label>X<input id="continuous-formation-x" type="number" step="any" /></label>
+            <label>Y<input id="continuous-formation-y" type="number" step="any" /></label>
+            <button id="continuous-formation-default" class="secondary-button" type="button">恢復預設站位</button>
+          </div>
+          <p id="continuous-formation-message" class="pass-target-zone-editor__message" role="status" aria-live="polite"></p>
+        </section>
+
         <div id="team-simulator-viewport" class="simulator-viewport team-simulator-viewport" aria-label="點擊指定六人接球落點">
           <div id="team-simulator-world" class="team-simulator-world">
             <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
@@ -273,6 +302,7 @@
               <span class="attack-position-marker attack-position-marker--ready" data-attack-marker="readyPosition" hidden></span>
               <span class="attack-position-marker attack-position-marker--attack" data-attack-marker="attackPosition" hidden></span>
             </div>
+            <div id="continuous-formation-overlay" class="continuous-formation-overlay" hidden aria-label="雙方初始站位編輯圖層"></div>
             <span id="team-simulator-target" class="simulator-target" hidden aria-hidden="true"></span>
             <span id="team-simulator-ball" class="simulator-ball" hidden aria-label="排球"></span>
           </div>

@@ -1279,10 +1279,67 @@ tbody tr:hover {
   border-color: #000000;
 }
 
+.team-simulator-player::after {
+  position: absolute;
+  top: calc(50% + 2.3rem);
+  left: 50%;
+  padding: 0.05rem 0.25rem;
+  color: #ffffff;
+  background: #000000cc;
+  border: 1px solid #ffffff;
+  font-size: 0.55rem;
+  line-height: 1.2;
+  transform: translateX(-50%);
+  content: attr(data-team);
+  pointer-events: none;
+}
+
+.continuous-rally-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.65rem;
+  border: 1px solid var(--color-line);
+}
+.continuous-rally-score p { margin: 0; }
+.continuous-rally-score div { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
 .simulator-player__motion {
   display: grid;
   place-items: center;
   transform: translateX(0) rotate(0deg);
+}
+
+.simulator-player__motion.is-serve-preparing {
+  animation: simulator-serve-prepare 340ms ease-out both;
+}
+.simulator-player__motion.is-serve-contacting {
+  animation: simulator-serve-contact 80ms ease-out both;
+}
+.simulator-player__motion.is-serve-following {
+  animation: simulator-serve-follow 420ms ease-out both;
+}
+.simulator-player__motion:not(.is-serve-away) {
+  --serve-shift-back: -10px; --serve-shift-forward: 9px;
+  --serve-angle-back: -18deg; --serve-angle-forward: 24deg;
+}
+.simulator-player__motion.is-serve-away {
+  --serve-shift-back: 10px; --serve-shift-forward: -9px;
+  --serve-angle-back: 18deg; --serve-angle-forward: -24deg;
+}
+@keyframes simulator-serve-prepare {
+  from { transform: translateX(0) rotate(0deg); }
+  to { transform: translateX(var(--serve-shift-back)) rotate(var(--serve-angle-back)); }
+}
+@keyframes simulator-serve-contact {
+  from { transform: translateX(var(--serve-shift-back)) rotate(var(--serve-angle-back)); }
+  to { transform: translateX(var(--serve-shift-forward)) rotate(var(--serve-angle-forward)); }
+}
+@keyframes simulator-serve-follow {
+  from { transform: translateX(var(--serve-shift-forward)) rotate(var(--serve-angle-forward)); }
+  to { transform: translateX(0) rotate(0deg); }
 }
 
 .simulator-player__avatar {
@@ -1930,7 +1987,54 @@ tbody tr:hover {
 .spike-court-outline { position: absolute; border: 1px dashed #65d9e580; pointer-events: none; }
 .spike-target-marker { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #65d9e5; transform: translate(-50%, -50%); pointer-events: none; }
 .single-defense-prediction { position: absolute; width: 10px; height: 10px; border: 2px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-.team-simulator-player[data-team="AWAY"] .simulator-player__avatar { background: #d79b72; }
+.continuous-formation-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  touch-action: none;
+}
+.continuous-formation-overlay[hidden] { display: none; }
+.continuous-formation-marker {
+  position: absolute;
+  width: 3.1rem;
+  height: 3.1rem;
+  padding: 0;
+  color: #17110d;
+  background: #e5b18b;
+  border: 3px solid #000000;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 800;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  user-select: none;
+}
+.continuous-formation-marker[data-team="HOME"]::after,
+.continuous-formation-marker[data-team="AWAY"]::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  padding: 0.05rem 0.2rem;
+  color: #ffffff;
+  background: #000000cc;
+  border: 1px solid #ffffff;
+  font-size: 0.5rem;
+  transform: translateX(-50%);
+  content: attr(data-team);
+}
+.continuous-formation-marker.is-selected { outline: 3px solid var(--color-gold); outline-offset: 2px; }
+.continuous-formation-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.continuous-formation-fields label { display: grid; gap: 0.25rem; color: var(--color-muted); font-size: 0.72rem; }
+.continuous-formation-fields input,
+.continuous-formation-fields select { min-width: 0; min-height: 2.5rem; }
+@media (max-width: 600px) {
+  .continuous-formation-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 #attack-position-editor .pass-target-zone-editor__actions {
   display: flex;

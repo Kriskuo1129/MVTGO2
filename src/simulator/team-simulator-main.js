@@ -16,6 +16,10 @@ import { validateAttackMotionParameters } from "./attack-motion.js";
 import { SINGLE_DEFENSE_DEFAULTS, validateSingleDefenseConfiguration } from "./single-defense.js";
 import { ATTACK_SEED_MODES } from "./attack-quality.js";
 import { getHighestUnlockedSpikeSpeed } from "./attack-resolution.js";
+import { ContinuousFormationEditor } from "./continuous-formation-editor.js";
+import { ContinuousRallySession } from "./continuous-rally-session.js";
+import { getAppearancePlayerIds, loadContinuousFormation,
+  saveContinuousFormation } from "./continuous-rally-formation.js";
 
 const PARAMETER_FIELDS = Object.freeze({
   avatarSize: "team-simulator-avatar-size",
@@ -92,6 +96,7 @@ function organizeTeamSimulatorLayout(root) {
   const leftLong = root.querySelector(".left-long-experiment");
   const zoneEditor = root.querySelector("#pass-target-zone-editor");
   const attackEditor = root.querySelector("#attack-position-editor");
+  const formationEditor = root.querySelector("#continuous-formation-editor");
   const debugNodes = [
     root.querySelector("#team-simulator-debug"),
     root.querySelector("#left-long-debug"),
@@ -104,15 +109,20 @@ function organizeTeamSimulatorLayout(root) {
   parameters.append(leftLong);
   debugNodes.forEach((node) => debugContent.append(node));
   debug.append(debugContent);
-  editors.append(zoneEditor, attackEditor);
+  editors.append(zoneEditor, attackEditor, formationEditor);
   toolbar.after(clickControls, viewport, output, parameters, debug, editors);
 }
 
 export function createTeamSimulatorApp({ root, onExit }) {
   organizeTeamSimulatorLayout(root);
   const simulator = new SpikeReceiveSimulator();
-  const continuousSimulator = new ContinuousRallySimulator();
+  let continuousFormation = loadContinuousFormation();
+  const continuousSimulator = new ContinuousRallySimulator({ initialFormation: continuousFormation });
+  const continuousSession = new ContinuousRallySession({ simulator: continuousSimulator, baseSeed: 20261112 });
   const continuousRallyEnabled = root.querySelector("#continuous-rally-enabled");
+  const continuousServingTeam = root.querySelector("#continuous-serving-team");
+  const continuousServeType = root.querySelector("#continuous-serve-type");
+  const continuousServeAbility = root.querySelector("#continuous-serve-ability");
   const attackEnabled = root.querySelector("#left-long-enabled");
   const attackRotation = root.querySelector("#left-long-rotation");
   const attackPlayer = root.querySelector("#left-long-player");
@@ -188,9 +198,14 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const settingsCancel = root.querySelector("#team-simulator-settings-cancel");
   const settingsApply = root.querySelector("#team-simulator-settings-apply");
   const settingsError = root.querySelector("#team-simulator-settings-error");
+  const sessionStart = root.querySelector("#continuous-session-start");
+  const sessionStop = root.querySelector("#continuous-session-stop");
+  const sessionRestart = root.querySelector("#continuous-session-restart");
   const zoneEditButton = root.querySelector("#pass-target-zone-edit");
   const attackEditButton = root.querySelector("#attack-position-edit");
   const attackCloseButton = root.querySelector("#attack-position-close");
+  const formationEditButton = root.querySelector("#continuous-formation-edit");
+  const formationCloseButton = root.querySelector("#continuous-formation-close");
   const zoneCloseButton = root.querySelector("#pass-target-zone-close");
   const zoneCopyButton = root.querySelector("#pass-target-zone-copy");
   const zoneApplyButton = root.querySelector("#pass-target-zone-apply");
@@ -232,7 +247,10 @@ export function createTeamSimulatorApp({ root, onExit }) {
       try {
         if (continuousRallyEnabled.checked) {
           renderer.stop();
+          continuousSession.stop();
           continuousSimulator.configure(readParameters());
+          continuousSimulator.configureServe({ servingTeam: continuousServingTeam.value,
+            ability: Number(continuousServeAbility.value), serveType: continuousServeType.value });
           continuousSimulator.launch(target);
           attackMessage.textContent = "雙方連續攻防模式：同一顆球將持續至 Rally 終止。";
           renderer.play(continuousSimulator);
@@ -309,6 +327,16 @@ export function createTeamSimulatorApp({ root, onExit }) {
     },
   });
   const attackEditor = new AttackPositionEditor({ root, renderer, onPreviewChange: () => refreshAttackConfiguration() });
+  const formationEditor = new ContinuousFormationEditor({
+    root,
+    renderer,
+    formation: continuousFormation,
+    onChange(formation) {
+      continuousFormation = saveContinuousFormation(formation);
+      continuousSimulator.configureFormation(continuousFormation);
+      renderer.renderWhenReady(continuousSimulator.getSnapshot());
+    },
+  });
   let resumeAfterAttackEditing = false;
 
   function refreshSpikeTarget() {
@@ -375,7 +403,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   players.forEach((player) => {
     const appearance = createDefaultAppearance();
     appearances.set(player.id, appearance);
-    renderer.setPlayerAppearance(player.id, appearance);
+    getAppearancePlayerIds(player.position).forEach((id) => renderer.setPlayerAppearance(id, appearance));
     appearancePlayer.add(new Option(`${player.position}（${player.rotationPosition}）`, player.id));
   });
 
@@ -411,7 +439,8 @@ export function createTeamSimulatorApp({ root, onExit }) {
   function updatePlayerAppearance(playerId, changes) {
     const appearance = { ...appearances.get(playerId), ...changes };
     appearances.set(playerId, appearance);
-    renderer.setPlayerAppearance(playerId, appearance);
+    const player = players.find((entry) => entry.id === playerId);
+    getAppearancePlayerIds(player.position).forEach((id) => renderer.setPlayerAppearance(id, appearance));
     if (getSelectedPlayer().id === playerId) renderAppearanceEditor();
   }
 
@@ -474,6 +503,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const handleReset = () => {
     if (attackEditor.active) closeAttackEditor();
     if (zoneEditor.active) closeZoneEditor();
+    if (formationEditor.active) closeFormationEditor();
     renderer.stop();
     writeParameters(TEAM_SIMULATOR_PARAMETERS);
     simulator.configure(TEAM_SIMULATOR_PARAMETERS);
@@ -491,12 +521,15 @@ export function createTeamSimulatorApp({ root, onExit }) {
     defenseSpeed.value = String(SINGLE_DEFENSE_DEFAULTS.moveSpeed);
     simulator.configureSingleDefense(SINGLE_DEFENSE_DEFAULTS);
     refreshSpikeTarget();
-    renderer.resetCamera(simulator.getSnapshot());
-    renderer.render(simulator.getSnapshot());
+    const snapshot = continuousRallyEnabled.checked
+      ? continuousSimulator.getSnapshot() : simulator.getSnapshot();
+    renderer.resetCamera(snapshot);
+    renderer.render(snapshot);
   };
   const handleCameraMode = () => renderer.setCameraMode(cameraMode.value);
   const openZoneEditor = () => {
     if (attackEditor.active) closeAttackEditor();
+    if (formationEditor.active) closeFormationEditor();
     resumeAfterZoneEditing = isReceiveExperimentRunning(simulator.getSnapshot().status);
     renderer.stop();
     renderer.setInteractionEnabled(false);
@@ -520,6 +553,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const openAttackEditor = () => {
     if (attackEditor.active) return;
     if (zoneEditor.active) closeZoneEditor();
+    if (formationEditor.active) closeFormationEditor();
     resumeAfterAttackEditing = isReceiveExperimentRunning(simulator.getSnapshot().status);
     renderer.stop();
     renderer.setInteractionEnabled(false);
@@ -537,6 +571,52 @@ export function createTeamSimulatorApp({ root, onExit }) {
     resumeAfterAttackEditing = false;
     if (!root.hidden) attackEditButton.focus({ preventScroll: true });
   };
+  const openFormationEditor = () => {
+    if (formationEditor.active) return;
+    if (zoneEditor.active) closeZoneEditor();
+    if (attackEditor.active) closeAttackEditor();
+    renderer.stop();
+    continuousRallyEnabled.checked = true;
+    continuousSimulator.configureFormation(continuousFormation);
+    renderer.setInteractionEnabled(false);
+    formationEditor.setActive(true);
+    formationEditButton.setAttribute("aria-pressed", "true");
+    renderer.resetCamera(continuousSimulator.getSnapshot());
+    renderer.renderWhenReady(continuousSimulator.getSnapshot());
+    formationCloseButton.focus({ preventScroll: true });
+  };
+  const closeFormationEditor = () => {
+    formationEditor.setActive(false);
+    renderer.setInteractionEnabled(true);
+    formationEditButton.setAttribute("aria-pressed", "false");
+    renderer.renderWhenReady(continuousSimulator.getSnapshot());
+    if (!root.hidden) formationEditButton.focus({ preventScroll: true });
+  };
+  const handleContinuousModeChange = () => {
+    renderer.stop();
+    if (!continuousRallyEnabled.checked && formationEditor.active) closeFormationEditor();
+    const snapshot = continuousRallyEnabled.checked
+      ? continuousSimulator.getSnapshot() : simulator.getSnapshot();
+    renderer.resetCamera(snapshot);
+    renderer.renderWhenReady(snapshot);
+  };
+  const startContinuousSession = () => {
+    renderer.stop();
+    continuousRallyEnabled.checked = true;
+    continuousSimulator.configure(readParameters());
+    continuousSimulator.configureFormation(continuousFormation);
+    continuousSession.start({ firstServingTeam: continuousServingTeam.value,
+      serveType: continuousServeType.value, serveAbility: Number(continuousServeAbility.value) });
+    attackMessage.textContent = "連續 Rally 測試進行中；每球完整收尾後自動計分並由得分方發下一球。";
+    renderer.play(continuousSession);
+  };
+  const stopContinuousSession = () => {
+    continuousSession.stop();
+    renderer.stop();
+    renderer.renderWhenReady(continuousSession.getSnapshot());
+    attackMessage.textContent = "連續 Rally 測試已停止，比分與最後畫面保留。";
+  };
+  const restartContinuousSession = () => startContinuousSession();
   const handleCopyZones = async () => {
     try {
       await zoneEditor.copyCoordinates();
@@ -554,6 +634,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const closeSettings = () => settingsDialog.close();
   const handleOpenSettings = () => {
     if (attackEditor.active) closeAttackEditor();
+    if (formationEditor.active) closeFormationEditor();
     settingsError.textContent = "";
     settingsDialog.showModal();
     requestAnimationFrame(() => fields.avatarSize.focus({ preventScroll: true }));
@@ -583,6 +664,12 @@ export function createTeamSimulatorApp({ root, onExit }) {
   zoneEditButton.addEventListener("click", openZoneEditor);
   attackEditButton.addEventListener("click", openAttackEditor);
   attackCloseButton.addEventListener("click", closeAttackEditor);
+  formationEditButton.addEventListener("click", openFormationEditor);
+  formationCloseButton.addEventListener("click", closeFormationEditor);
+  continuousRallyEnabled.addEventListener("change", handleContinuousModeChange);
+  sessionStart.addEventListener("click", startContinuousSession);
+  sessionStop.addEventListener("click", stopContinuousSession);
+  sessionRestart.addEventListener("click", restartContinuousSession);
   [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.addEventListener("change", refreshAttackConfiguration));
   spikeEnabled.addEventListener("change", refreshSpikeTarget);
   spikeFlightMode.addEventListener("change", refreshSpikeTarget);
@@ -613,7 +700,8 @@ export function createTeamSimulatorApp({ root, onExit }) {
     show() {
       root.hidden = false;
       root.querySelector("#team-simulator-title").focus({ preventScroll: true });
-      renderer.renderWhenReady(simulator.getSnapshot());
+      renderer.renderWhenReady(continuousRallyEnabled.checked
+        ? continuousSimulator.getSnapshot() : simulator.getSnapshot());
     },
     hide() {
       renderer.stop();
@@ -628,6 +716,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
         renderer.setInteractionEnabled(true);
         resumeAfterZoneEditing = false;
       }
+      if (formationEditor.active) closeFormationEditor();
       if (settingsDialog.open) settingsDialog.close();
       root.hidden = true;
     },
@@ -635,6 +724,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
       photoLoadSequence += 1;
       zoneEditor.destroy();
       attackEditor.destroy();
+      formationEditor.destroy();
       renderer.destroy();
       resetButton.removeEventListener("click", handleReset);
       backButton.removeEventListener("click", handleBack);
@@ -642,6 +732,12 @@ export function createTeamSimulatorApp({ root, onExit }) {
       zoneEditButton.removeEventListener("click", openZoneEditor);
       attackEditButton.removeEventListener("click", openAttackEditor);
       attackCloseButton.removeEventListener("click", closeAttackEditor);
+      formationEditButton.removeEventListener("click", openFormationEditor);
+      formationCloseButton.removeEventListener("click", closeFormationEditor);
+      continuousRallyEnabled.removeEventListener("change", handleContinuousModeChange);
+      sessionStart.removeEventListener("click", startContinuousSession);
+      sessionStop.removeEventListener("click", stopContinuousSession);
+      sessionRestart.removeEventListener("click", restartContinuousSession);
       [attackEnabled, attackRotation, attackPlayer].forEach((control) => control.removeEventListener("change", refreshAttackConfiguration));
       spikeEnabled.removeEventListener("change", refreshSpikeTarget);
       spikeFlightMode.removeEventListener("change", refreshSpikeTarget);

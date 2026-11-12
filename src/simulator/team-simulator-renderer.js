@@ -23,6 +23,12 @@ export function getTeamSimulatorStatusText(snapshot) {
   return `${prefix}：${snapshot.rallyResult?.reason ?? "未知"}／得分方 ${snapshot.rallyResult?.scoringTeam ?? "—"}`;
 }
 
+export function isNewContinuousBallFlight(snapshot, lastFollowedBallFlightId) {
+  return Number.isInteger(snapshot?.ballFlightId)
+    && snapshot.ballFlightId > 0
+    && snapshot.ballFlightId !== lastFollowedBallFlightId;
+}
+
 function formatDebugDistance(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)} 世界單位` : "—";
 }
@@ -61,6 +67,8 @@ export class TeamSimulatorRenderer {
     this.lastTimestamp = null;
     this.simulator = null;
     this.lastSnapshot = null;
+    this.lastFollowedBallFlightId = null;
+    this.lastSessionRallyNumber = null;
     this.interactionEnabled = true;
     this.camera = new SimulatorCameraController({ world: SIMULATOR_WORLD });
     this.handleClick = this.handleClick.bind(this);
@@ -292,7 +300,8 @@ export class TeamSimulatorRenderer {
     motion.className = "simulator-player__motion";
     const fallback = document.createElement("span");
     fallback.className = "simulator-player__fallback";
-    fallback.textContent = player.position;
+    fallback.textContent = player.team
+      ? `${player.team === "HOME" ? "H" : "A"}·${player.position}` : player.position;
     const image = document.createElement("img");
     image.className = "simulator-player__photo";
     image.alt = "";
@@ -337,11 +346,13 @@ export class TeamSimulatorRenderer {
   play(simulator) {
     this.stop();
     this.simulator = simulator;
+    this.lastFollowedBallFlightId = null;
     this.lastTimestamp = null;
     const snapshot = simulator.getSnapshot();
+    this.lastSessionRallyNumber = snapshot.session?.rallyNumber ?? null;
     if (this.camera.mode === CAMERA_MODES.FULL_COURT
       || this.lastSnapshot?.status === "READY") this.resetCamera(snapshot);
-    this.beginCameraFollow(snapshot);
+    if (!this.followNewContinuousBallFlight(snapshot)) this.beginCameraFollow(snapshot);
     this.render(snapshot);
     this.frameId = requestAnimationFrame((timestamp) => this.tick(timestamp));
   }
@@ -352,7 +363,17 @@ export class TeamSimulatorRenderer {
     const deltaSeconds = Math.max(0, (timestamp - this.lastTimestamp) / 1000);
     this.lastTimestamp = timestamp;
     const snapshot = this.simulator.updateFrame(deltaSeconds);
-    if (["PASS_IN_FLIGHT", "THIRD_PASS_IN_FLIGHT", "SPIKE_IN_FLIGHT"].includes(snapshot.status) && this.lastSnapshot?.status !== snapshot.status) {
+    if (snapshot.session?.rallyNumber !== undefined
+      && snapshot.session.rallyNumber !== this.lastSessionRallyNumber) {
+      this.lastSessionRallyNumber = snapshot.session.rallyNumber;
+      this.lastFollowedBallFlightId = null;
+      this.resetCamera(snapshot);
+    }
+    if (isNewContinuousBallFlight(snapshot, this.lastFollowedBallFlightId)) {
+      this.followNewContinuousBallFlight(snapshot);
+    } else if (!Number.isInteger(snapshot.ballFlightId)
+      && ["PASS_IN_FLIGHT", "THIRD_PASS_IN_FLIGHT", "SPIKE_IN_FLIGHT"].includes(snapshot.status)
+      && this.lastSnapshot?.status !== snapshot.status) {
       this.beginCameraFollow(snapshot);
     }
     const viewportRect = this.viewport.getBoundingClientRect();
@@ -376,6 +397,12 @@ export class TeamSimulatorRenderer {
 
   render(snapshot) {
     this.lastSnapshot = snapshot;
+    if (snapshot.session) {
+      this.root.querySelector("#continuous-score-home").textContent = String(snapshot.session.scores.HOME);
+      this.root.querySelector("#continuous-score-away").textContent = String(snapshot.session.scores.AWAY);
+      this.root.querySelector("#continuous-rally-number").textContent = String(snapshot.session.rallyNumber);
+      this.root.querySelector("#continuous-current-server").textContent = snapshot.session.servingTeam;
+    }
     this.renderAttackExperiment(snapshot);
     this.renderSpikeExperiment(snapshot);
     const toLeft = (x) => `${x / snapshot.world.width * 100}%`;
@@ -402,13 +429,14 @@ export class TeamSimulatorRenderer {
     snapshot.players.forEach((player) => {
       const { wrapper, motion, avatar } = this.ensurePlayerElement(player);
       wrapper.hidden = false;
-      wrapper.dataset.team = player.team ?? "HOME";
+      if (player.team) wrapper.dataset.team = player.team;
+      else delete wrapper.dataset.team;
       wrapper.style.left = toLeft(player.x);
       wrapper.style.top = toTop(player.y);
       wrapper.classList.toggle("is-primary-receiver", player.responsibility === "PRIMARY");
       wrapper.classList.toggle("is-touch-eligible", player.touchEligible);
       wrapper.dataset.task = player.task;
-      wrapper.title = `${player.position}｜${player.rotationPosition}｜${player.task}`;
+      wrapper.title = `${player.team ?? "實驗"}｜${player.position}｜${player.rotationPosition}｜${player.task}`;
       avatar.style.width = `${avatarDisplaySize}px`;
       avatar.style.height = `${avatarDisplaySize}px`;
       const { isReceiving, isSuccessfulSet, profile: animationProfile,
@@ -433,6 +461,10 @@ export class TeamSimulatorRenderer {
       motion.style.setProperty("--receive-roll-distance", `${pushDirection * rollWorldDistance * cameraView.displayScale}px`);
       motion.style.setProperty("--receive-roll-rotation", `${pushDirection * 360}deg`);
       motion.classList.toggle("is-ultra-fast-receiving", isUltraFastReceive);
+      motion.classList.toggle("is-serve-preparing", player.action === "SERVE_PREPARE");
+      motion.classList.toggle("is-serve-contacting", player.action === "SERVE_CONTACT");
+      motion.classList.toggle("is-serve-following", player.action === "SERVE_FOLLOW_THROUGH");
+      motion.classList.toggle("is-serve-away", player.team === "AWAY");
       // 僅畫出固定步進快照；既有 RECEIVE 的 CSS 動畫與幾何維持原樣。
       const hasAttackPose = ["TAKEOFF", "DRAW", "SWING", "FOLLOW_THROUGH", "LANDED"].includes(player.jumpPhase);
       motion.style.transform = hasAttackPose
@@ -601,7 +633,9 @@ export class TeamSimulatorRenderer {
         this.resetCamera(this.lastSnapshot);
       } else {
         if (this.lastSnapshot.status === "READY") this.resetCamera(this.lastSnapshot);
-        this.beginCameraFollow(this.lastSnapshot);
+        if (!this.followNewContinuousBallFlight(this.lastSnapshot, { force: true })) {
+          this.beginCameraFollow(this.lastSnapshot);
+        }
       }
       this.render(this.lastSnapshot);
     }
@@ -609,9 +643,9 @@ export class TeamSimulatorRenderer {
 
   beginCameraFollow(snapshot = this.lastSnapshot) {
     if (!snapshot || !["RUNNING", "PASS_IN_FLIGHT", "THIRD_PASS_IN_FLIGHT", "SPIKE_IN_FLIGHT"].includes(snapshot.status)
-      || this.camera.mode !== CAMERA_MODES.FOLLOW_BALL) return;
+      || this.camera.mode !== CAMERA_MODES.FOLLOW_BALL) return false;
     const rect = this.viewport.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    if (rect.width <= 0 || rect.height <= 0) return false;
     const remainingFlightTime = snapshot.ball.duration * Math.max(0, 1 - snapshot.ball.progress);
     this.camera.beginFollowRoute({
       startX: snapshot.ball.x,
@@ -620,6 +654,15 @@ export class TeamSimulatorRenderer {
       viewportWidth: rect.width,
       viewportHeight: rect.height,
     });
+    return true;
+  }
+
+  followNewContinuousBallFlight(snapshot, { force = false } = {}) {
+    if (!Number.isInteger(snapshot?.ballFlightId) || snapshot.ballFlightId <= 0
+      || (!force && snapshot.ballFlightId === this.lastFollowedBallFlightId)) return false;
+    if (!this.beginCameraFollow(snapshot)) return false;
+    this.lastFollowedBallFlightId = snapshot.ballFlightId;
+    return true;
   }
 
   resetCamera(snapshot = this.lastSnapshot) {
