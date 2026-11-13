@@ -32,25 +32,60 @@ assert.ok(selectIndex >= 0 && setContactIndex > selectIndex, "SET_SELECT 與實�
 assert.ok(attackIndex > setContactIndex, "ATTACK_CONTACT 只能來自真實第三觸球。");
 assert.ok(result.entries[selectIndex].details.evaluations.every((entry) => typeof entry.feasible === "boolean"));
 assert.ok(result.entries[attackIndex].details.attackType);
+const attackPlans = result.entries.filter((entry) => entry.type === "ATTACK_PLAN");
+assert.deepEqual(new Set(attackPlans.map((entry) => entry.team)), new Set(["HOME", "AWAY"]));
+assert.ok(attackPlans.some((entry) => entry.details.attackPhase === "SERVE_RECEIVE"
+  && entry.details.candidates.length === 4
+  && /SERVE_RECEIVE（接發進攻）/.test(entry.message)));
+assert.ok(attackPlans.some((entry) => entry.details.attackPhase === "COUNTERATTACK"
+  && /COUNTERATTACK（防守反擊）/.test(entry.message)));
+assert.ok(attackPlans.every((entry) => entry.message.includes(entry.details.attackPlanId)));
+assert.ok(attackPlans.some((entry) => /OH1 背長/.test(entry.message) && /OP 長攻/.test(entry.message)));
 for (const attack of result.entries.filter((entry) => entry.type === "ATTACK_CONTACT")) {
   assert.equal(attack.details.attackType,
-    getR1AttackConfigurations(attack.team)[attack.job].attackType,
+    getR1AttackConfigurations(attack.team, attack.details.attackPhase)[attack.job].attackType,
     "Event Log 必須顯示以攻擊方自身視角定義的攻擊類型。 ");
 }
 assert.match(result.text, /Rally #1 \| Seed 2/);
 assert.match(result.text, /SET_SELECT/);
 assert.match(result.text, /ATTACK_CONTACT/);
+assert.match(result.text, /BLOCK_ASSIGN/);
+assert.ok(result.entries.some((entry) => entry.type === "FORMATION_TRANSITION"
+  && /ATTACK_CROSSED_NET → DEFENSE/.test(entry.message)));
+const serveTransition = mapSimulatorEventToRallyLog({ type: "R1_WORK_PLAN_ASSIGNED", time: 0.8,
+  team: "HOME", phase: "DEFENSE_STANDBY", reason: "SERVE_CONTACT", revision: 2 }, {
+  rallyId: 1, sequence: 2, seed: 2, servingTeam: "HOME", players: [],
+});
+assert.equal(serveTransition.type, "FORMATION_TRANSITION");
+assert.match(serveTransition.message, /SERVE_CONTACT → DEFENSE/);
+const blockContactIndex = result.entries.findIndex((entry) => entry.type === "BLOCK_CONTACT");
+if (blockContactIndex >= 0) {
+  assert.equal(result.entries[blockContactIndex + 1].type, "BLOCK_RESULT",
+    "真實攔網接觸後才可記錄攔網結果。 ");
+  assert.ok(result.entries[blockContactIndex].details.height > 0);
+}
 assert.match(result.text, /RALLY_END/);
 
 const forcedSelection = mapSimulatorEventToRallyLog({ type: "ATTACK_SELECTED", time: 2,
   team: "AWAY", playerId: "AWAY-OH1", job: "OH1", setterPlayerId: "AWAY-OP",
-  setterJob: "OP", attackType: "LEFT_LONG", attackPlanId: "AWAY-R1-ATTACK-2",
+  setterJob: "OP", attackType: "RIGHT_LONG", attackPlanId: "AWAY-R1-ATTACK-2",
+  attackRole: "BACK_LONG", attackPhase: "COUNTERATTACK",
   forced: true, evaluations: [{ job: "OH1", feasible: true, reason: null }] }, {
   rallyId: 8, sequence: 4, seed: 99, servingTeam: "HOME", players: [],
 });
 assert.equal(forcedSelection.job, "OP");
 assert.equal(forcedSelection.details.selectedJob, "OH1");
-assert.match(forcedSelection.message, /OH1 LEFT_LONG（指定）/);
+assert.match(forcedSelection.message, /OP 代舉 → OH1 背長（指定）/);
+
+const forcedPlan = mapSimulatorEventToRallyLog({ type: "ATTACK_PLAN_CREATED", time: 1.5,
+  team: "HOME", attackPlanId: "HOME-R1-ATTACK-3", setterJob: "OP",
+  attackPhase: "COUNTERATTACK", forcedCandidateJob: "OH1", candidateJobs: ["OH1"],
+  candidates: [{ job: "OH1", attackType: "RIGHT_LONG", attackRole: "BACK_LONG",
+    workType: "PREPARE_BACK_LONG" }] }, {
+  rallyId: 8, sequence: 3, seed: 99, servingTeam: "AWAY", players: [],
+});
+assert.match(forcedPlan.message,
+  /COUNTERATTACK（防守反擊）｜計畫 HOME-R1-ATTACK-3｜候選：OH1 背長；OP 代舉，固定候選 OH1/);
 
 const core = (entries) => entries.map(({ sequence, simTime, team, job, type, details }) =>
   ({ sequence, simTime, team, job, type, details }));

@@ -106,7 +106,7 @@ assert.ok(stageRun.flights.some((flight) => flight.targetX > flight.startX));
 assert.ok(stageRun.flights.some((flight) => flight.targetX < flight.startX),
   "HOME／AWAY 來回球路必須同時包含左右兩種 Camera 方向。");
 
-const errorRun = renderContinuousStages({ seed: 9 });
+const errorRun = renderContinuousStages({ seed: 11 });
 assert.ok(errorRun.phases.has("ERROR_FLIGHT"), "Renderer 必須處理 ERROR_FLIGHT 階段。");
 
 const assignment = stageRun.finalSnapshot.attackAssignment;

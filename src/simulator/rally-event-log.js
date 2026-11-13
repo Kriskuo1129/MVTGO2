@@ -11,6 +11,12 @@ const TYPE_MAP = Object.freeze({
   SECOND_TOUCH: "SET_CONTACT",
   ATTACK_JUMP_STARTED: "ATTACK_READY",
   THIRD_TOUCH: "ATTACK_CONTACT",
+  BLOCK_ASSIGN: "BLOCK_ASSIGN",
+  BLOCK_READY: "BLOCK_READY",
+  BLOCK_JUMP: "BLOCK_JUMP",
+  BLOCK_CONTACT: "BLOCK_CONTACT",
+  BLOCK_RESULT: "BLOCK_RESULT",
+  BLOCK_MISS: "BLOCK_MISS",
   RALLY_RESULT_LOCKED: "RALLY_END",
 });
 
@@ -22,21 +28,49 @@ function immutableDetails(value) {
   return Object.freeze(JSON.parse(JSON.stringify(value)));
 }
 
+const attackRoleLabel = (candidate) => candidate.attackRole === "LONG" ? "長攻"
+  : candidate.attackRole === "BACK_LONG" ? "背長"
+    : candidate.attackRole === "MIDDLE_QUICK" ? "快攻"
+      : candidate.attackRole === "BACK_CENTER_LONG" ? "6 號位後排攻擊"
+        : candidate.attackType ?? candidate.workType ?? "未指定攻擊";
+
+function describeAttackPlan(details) {
+  const phaseLabel = details.attackPhase === "SERVE_RECEIVE" ? "接發進攻"
+    : details.attackPhase === "COUNTERATTACK" ? "防守反擊" : "未知階段";
+  const candidates = (details.candidates ?? []).map((candidate) =>
+    `${candidate.job} ${attackRoleLabel(candidate)}`).join("、");
+  const alternateSet = details.setterJob === "OP"
+    ? `；OP 代舉，固定候選 ${details.forcedCandidateJob ?? "—"}` : "";
+  return `${details.attackPhase ?? "UNKNOWN"}（${phaseLabel}）｜計畫 ${details.attackPlanId}`
+    + `｜候選：${candidates || "—"}${alternateSet}`;
+}
+
 function describe(entry) {
   const d = entry.details ?? {};
+  const attackLabel = d.attackRole === "LONG" ? "長攻"
+    : d.attackRole === "BACK_LONG" ? "背長" : d.attackType;
   switch (entry.type) {
     case "RALLY_START": return `Seed ${d.seed}，${d.servingTeam ?? entry.team} 發球`;
     case "SERVE_CONTACT": return `發球實際擊球${d.speedLevel ? `，球速 ${d.speedLevel}` : ""}`;
     case "RECEIVE_ASSIGN": return `指派 ${entry.job ?? d.playerId ?? "—"} 接球`;
     case "RECEIVE_CONTACT": return "第一觸球完成";
     case "RECEIVE_RESULT": return `接球結果 ${d.result}${d.quality ? `／${d.quality}` : ""}`;
-    case "ATTACK_PLAN": return `計畫 ${d.attackPlanId}：${(d.candidateJobs ?? []).join("、")}`;
+    case "ATTACK_PLAN": return describeAttackPlan(d);
     case "SET_SELECT": return d.selectedJob
-      ? `選擇 ${d.selectedJob} ${d.attackType}${d.forced ? "（指定）" : ""}`
+      ? d.forced && d.setterJob === "OP"
+        ? `OP 代舉 → ${d.selectedJob} ${attackLabel}（指定）`
+        : `選擇 ${d.selectedJob} ${attackLabel}${d.forced ? "（指定）" : ""}`
       : `無可行攻擊手${d.reason ? `：${d.reason}` : ""}`;
     case "SET_CONTACT": return "第二觸球完成";
     case "ATTACK_READY": return `${entry.job ?? d.playerId ?? "攻擊手"} 到達擊球位置並起跳`;
     case "ATTACK_CONTACT": return `${d.attackType ?? "攻擊"}第三觸球完成`;
+    case "BLOCK_ASSIGN": return `${d.attackType} 攔網責任：${(d.jobs ?? []).join("＋")}`;
+    case "BLOCK_READY": return `${entry.job} 已抵達攔網位置`;
+    case "BLOCK_JUMP": return `${entry.job} 實際起跳攔網`;
+    case "BLOCK_CONTACT": return `${entry.job} 真正攔網觸球，高度 ${Number(d.height).toFixed(1)}`;
+    case "BLOCK_RESULT": return d.result === "STUFF_BLOCK" ? "攔網反彈回攻擊方場內" : "攔網觸球減速進入防守方場內";
+    case "BLOCK_MISS": return `${entry.job} 未碰到球：${d.reason}`;
+    case "FORMATION_TRANSITION": return `${d.reason} → ${String(d.phase).replace("_STANDBY", "")}`;
     case "DEFENSE_TRANSITION": return `切換 R1 防守工作（${d.reason}）`;
     case "RALLY_END": return `${d.reason}，得分 ${d.scoringTeam}`;
     default: return d.reason ?? entry.type;
@@ -46,6 +80,8 @@ function describe(entry) {
 export function mapSimulatorEventToRallyLog(event, context) {
   let type = TYPE_MAP[event.type];
   if (event.type === "R1_WORK_PLAN_ASSIGNED" && event.phase === "DEFENSE") type = "DEFENSE_TRANSITION";
+  if (event.type === "R1_WORK_PLAN_ASSIGNED"
+    && ["RECEIVE_STANDBY", "DEFENSE_STANDBY"].includes(event.phase)) type = "FORMATION_TRANSITION";
   if (!type && FAILURE_TYPES.has(event.type)) type = event.type;
   if (!type) return null;
   const player = context.players?.find((candidate) => candidate.id === event.playerId);

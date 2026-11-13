@@ -10,12 +10,23 @@ export const SERVE_TYPE_CONFIG = Object.freeze({
   STANDING: Object.freeze({ speedFactors: Object.freeze({ SLOW: 1.6, NORMAL: 1.15, FAST: 0.35 }), arcHeight: 305, control: 1.35, tossDuration: 0.72, tossArcHeight: 105, contactHeight: 132 }),
   JUMP: Object.freeze({ speedFactors: Object.freeze({ SLOW: 0.55, NORMAL: 1, FAST: 1.45 }), arcHeight: 215, control: 0.76, tossDuration: 1.02, tossArcHeight: 235, contactHeight: 205 }),
 });
+export const SERVE_TARGET_ZONE_WEIGHTS = Object.freeze({ BACK: 80, FRONT: 20 });
 
 const mirrorX = (x, court = SPIKE_COURT_V1) => court.world.width - x;
 const normalize = (weights) => {
   const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
   return Object.freeze(Object.fromEntries(Object.entries(weights).map(([key, value]) => [key, value / total * 100])));
 };
+const midpoint = (a, b) => Object.freeze({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+export function getServeTargetZones(court = SPIKE_COURT_V1) {
+  const [backTop, netTop, netBottom, backBottom] = court.leftLandingPolygon;
+  const middleTop = midpoint(backTop, netTop), middleBottom = midpoint(backBottom, netBottom);
+  return Object.freeze({
+    BACK: Object.freeze([backTop, middleTop, middleBottom, backBottom]),
+    FRONT: Object.freeze([middleTop, netTop, netBottom, middleBottom]),
+  });
+}
 
 export function normalizeServeType(value) {
   const normalized = LEGACY_SERVE_TYPE_MAP[value] ?? value;
@@ -92,19 +103,25 @@ export function resolveServeLaunch({ team, server, random, manualTarget = null,
   const config = SERVE_TYPE_CONFIG[serveType];
   const weights = getServeSpeedWeights(server.serveAbility, serveType);
   const speedLevel = selectWeighted(weights, random);
-  const leftTarget = sampleUniformQuadrilateral(court.leftLandingPolygon, random);
+  // 手動測試仍走既有完整區域取樣以維持 Seed 序列；正式發球才套用前／後場權重。
+  const targetZone = manualTarget ? "MANUAL"
+    : random() * 100 < SERVE_TARGET_ZONE_WEIGHTS.BACK ? "BACK" : "FRONT";
+  const leftTarget = sampleUniformQuadrilateral(manualTarget
+    ? court.leftLandingPolygon : getServeTargetZones(court)[targetZone], random);
   const sampled = team === "HOME" ? { x: mirrorX(leftTarget.x, court), y: leftTarget.y } : leftTarget;
   const controlSpread = (100 - server.serveAbility) * 1.65 / config.control;
+  const spreadTarget = { x: sampled.x + (random() * 2 - 1) * controlSpread,
+    y: sampled.y + (random() * 2 - 1) * controlSpread };
   const target = manualTarget ? { x: manualTarget.x, y: manualTarget.y }
-    : { x: sampled.x + (random() * 2 - 1) * controlSpread,
-      y: sampled.y + (random() * 2 - 1) * controlSpread };
+    : { x: team === "HOME" ? Math.max(court.netX + 1, spreadTarget.x)
+      : Math.min(court.netX - 1, spreadTarget.x), y: spreadTarget.y };
   const position = getServePosition(team, target.y, court);
   const contact = contactPoint ?? Object.freeze({ x: position.x + (team === "HOME" ? 64 : -64), y: position.y,
     height: config.contactHeight });
   const distance = Math.hypot(target.x - contact.x, target.y - contact.y);
   const duration = distance / getSpikeReferenceSpeed(speedLevel);
   return Object.freeze({ team, serverId: server.id, serveType,
-    ability: server.serveAbility, speedLevel, speedWeights: weights, start: contact, contact,
+    ability: server.serveAbility, speedLevel, speedWeights: weights, targetZone, start: contact, contact,
     target: Object.freeze({ ...target, height: 32.5 }), duration,
     arcHeight: config.arcHeight + (random() * 2 - 1) * 24 });
 }

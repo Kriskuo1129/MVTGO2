@@ -348,9 +348,17 @@ export function createTeamSimulatorApp({ root, onExit }) {
     renderer,
     formation: continuousFormation,
     onChange(formation) {
-      continuousFormation = saveContinuousFormation(formation);
+      continuousFormation = formation;
       continuousSimulator.configureFormation(continuousFormation);
       renderer.renderWhenReady(continuousSimulator.getSnapshot());
+    },
+    onSave(formation) {
+      continuousFormation = saveContinuousFormation(formation);
+      return continuousFormation;
+    },
+    onReload() {
+      continuousFormation = loadContinuousFormation();
+      return continuousFormation;
     },
   });
   let resumeAfterAttackEditing = false;
@@ -591,6 +599,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
     if (formationEditor.active) return;
     if (zoneEditor.active) closeZoneEditor();
     if (attackEditor.active) closeAttackEditor();
+    continuousSession.stop();
     renderer.stop();
     continuousRallyEnabled.checked = true;
     continuousSimulator.configureFormation(continuousFormation);
@@ -599,6 +608,8 @@ export function createTeamSimulatorApp({ root, onExit }) {
     formationEditButton.setAttribute("aria-pressed", "true");
     renderer.resetCamera(continuousSimulator.getSnapshot());
     renderer.renderWhenReady(continuousSimulator.getSnapshot());
+    sessionStop.textContent = "暫停";
+    attackMessage.textContent = "Rally 已停止；正在編輯 R1 初始站位。儲存後請重新開始測試。";
     formationCloseButton.focus({ preventScroll: true });
   };
   const closeFormationEditor = () => {
@@ -618,6 +629,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   };
   const startContinuousSession = () => {
     renderer.stop();
+    if (formationEditor.active) closeFormationEditor();
     continuousRallyEnabled.checked = true;
     continuousSession.baseSeed = Number(continuousRallySeed.value) >>> 0;
     rallyLogStore.beginSession();
