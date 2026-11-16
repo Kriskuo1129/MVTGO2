@@ -18,8 +18,8 @@ import { ATTACK_SEED_MODES } from "./attack-quality.js";
 import { getHighestUnlockedSpikeSpeed } from "./attack-resolution.js";
 import { ContinuousFormationEditor } from "./continuous-formation-editor.js";
 import { ContinuousRallySession } from "./continuous-rally-session.js";
-import { getAppearancePlayerIds, loadContinuousFormation,
-  saveContinuousFormation } from "./continuous-rally-formation.js";
+import { getAppearancePlayerIds, getContinuousRotationFormation,
+  loadContinuousFormationLibrary, saveContinuousFormationLibrary } from "./continuous-rally-formation.js";
 import { formatRallyEventLog, RallyEventLogStore } from "./rally-event-log.js";
 
 const PARAMETER_FIELDS = Object.freeze({
@@ -119,7 +119,8 @@ function organizeTeamSimulatorLayout(root) {
 export function createTeamSimulatorApp({ root, onExit }) {
   organizeTeamSimulatorLayout(root);
   const simulator = new SpikeReceiveSimulator();
-  let continuousFormation = loadContinuousFormation();
+  let continuousFormationLibrary = loadContinuousFormationLibrary();
+  let continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
   const continuousSimulator = new ContinuousRallySimulator({ initialFormation: continuousFormation });
   const continuousSession = new ContinuousRallySession({ simulator: continuousSimulator, baseSeed: 20261112 });
   const continuousRallyEnabled = root.querySelector("#continuous-rally-enabled");
@@ -346,19 +347,22 @@ export function createTeamSimulatorApp({ root, onExit }) {
   const formationEditor = new ContinuousFormationEditor({
     root,
     renderer,
-    formation: continuousFormation,
-    onChange(formation) {
-      continuousFormation = formation;
+    formation: continuousFormationLibrary,
+    onChange(library) {
+      continuousFormationLibrary = library;
+      continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
       continuousSimulator.configureFormation(continuousFormation);
       renderer.renderWhenReady(continuousSimulator.getSnapshot());
     },
-    onSave(formation) {
-      continuousFormation = saveContinuousFormation(formation);
-      return continuousFormation;
+    onSave(library) {
+      continuousFormationLibrary = saveContinuousFormationLibrary(library);
+      continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
+      return continuousFormationLibrary;
     },
     onReload() {
-      continuousFormation = loadContinuousFormation();
-      return continuousFormation;
+      continuousFormationLibrary = loadContinuousFormationLibrary();
+      continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
+      return continuousFormationLibrary;
     },
   });
   let resumeAfterAttackEditing = false;
@@ -609,7 +613,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
     renderer.resetCamera(continuousSimulator.getSnapshot());
     renderer.renderWhenReady(continuousSimulator.getSnapshot());
     sessionStop.textContent = "暫停";
-    attackMessage.textContent = "Rally 已停止；正在編輯 R1 初始站位。儲存後請重新開始測試。";
+    attackMessage.textContent = "Rally 已停止；正在編輯 R1～R6 初始站位。Rally 測試目前仍使用 R1。";
     formationCloseButton.focus({ preventScroll: true });
   };
   const closeFormationEditor = () => {

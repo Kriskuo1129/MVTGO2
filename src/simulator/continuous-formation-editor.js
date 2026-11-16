@@ -1,12 +1,14 @@
-import { CONTINUOUS_FORMATION_MODES,
-  constrainContinuousPosition, resetContinuousFormationMode, updateContinuousFormationPosition,
-  validateContinuousFormation } from "./continuous-rally-formation.js";
+import { CONTINUOUS_FORMATION_MODES, CONTINUOUS_FORMATION_ROTATIONS,
+  constrainContinuousPosition, exportContinuousFormationLibrary, importContinuousFormationLibrary,
+  resetContinuousFormationLibraryMode, updateContinuousFormationLibraryPosition,
+  validateContinuousFormationLibrary } from "./continuous-rally-formation.js";
 
 export class ContinuousFormationEditor {
   constructor({ root, renderer, formation, onChange, onSave, onReload }) {
     this.renderer = renderer;
     this.panel = root.querySelector("#continuous-formation-editor");
     this.overlay = root.querySelector("#continuous-formation-overlay");
+    this.rotationSelect = root.querySelector("#continuous-formation-rotation");
     this.modeSelect = root.querySelector("#continuous-formation-mode");
     this.select = root.querySelector("#continuous-formation-player");
     this.xInput = root.querySelector("#continuous-formation-x");
@@ -15,7 +17,8 @@ export class ContinuousFormationEditor {
     this.onChange = onChange;
     this.onSave = onSave;
     this.onReload = onReload;
-    this.formation = validateContinuousFormation(formation);
+    this.importInput = root.querySelector("#continuous-formation-import-input");
+    this.formation = validateContinuousFormationLibrary(formation);
     this.active = false;
     this.drag = null;
     this.listeners = [];
@@ -23,7 +26,7 @@ export class ContinuousFormationEditor {
       element.addEventListener(type, handler);
       this.listeners.push(() => element.removeEventListener(type, handler));
     };
-    for (const position of this.formation.profiles.SERVE.map((entry) => entry.position)) {
+    for (const position of this.profile.SERVE.map((entry) => entry.position)) {
       this.select.add(new Option(position, position));
       const marker = document.createElement("button");
       marker.type = "button";
@@ -32,6 +35,7 @@ export class ContinuousFormationEditor {
       marker.dataset.team = "STANDARD";
       this.overlay.append(marker);
     }
+    listen(this.rotationSelect, "change", () => this.render());
     listen(this.modeSelect, "change", () => this.render());
     listen(this.select, "change", () => this.render());
     const input = () => {
@@ -58,30 +62,64 @@ export class ContinuousFormationEditor {
     });
     listen(root.querySelector("#continuous-formation-default"), "click", () => {
       this.attempt(() => {
-        this.formation = resetContinuousFormationMode(this.formation, this.mode);
-        this.onChange(this.formation); this.render();
-        this.message.textContent = `已還原 ${this.mode} 預設；按「儲存目前配置」寫入本機。`;
+        this.formation = resetContinuousFormationLibraryMode(this.formation,
+          this.rotation, this.mode);
+        this.persist();
+        this.message.textContent = `已還原並儲存 ${this.rotation}/${this.mode} 預設。`;
       });
     });
     listen(root.querySelector("#continuous-formation-save"), "click", () => this.attempt(() => {
-      this.formation = validateContinuousFormation(this.onSave(this.formation));
-      this.render(); this.message.textContent = `${this.mode} 與另一配置已儲存。`;
+      this.persist(); this.message.textContent = "R1～R6 全部站位已儲存。";
     }));
     listen(root.querySelector("#continuous-formation-reload"), "click", () => this.attempt(() => {
-      this.formation = validateContinuousFormation(this.onReload());
+      this.formation = validateContinuousFormationLibrary(this.onReload());
       this.onChange(this.formation); this.render(); this.message.textContent = "已重新載入本機儲存站位。";
     }));
+    listen(root.querySelector("#continuous-formation-export"), "click", () => this.attempt(() => {
+      const blob = new Blob([exportContinuousFormationLibrary(this.formation)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = "MVTGO2_R1-R6_FORMATIONS.json"; anchor.hidden = true;
+      document.body.append(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      this.message.textContent = "已匯出 R1～R6 全部站位 JSON。";
+    }));
+    listen(root.querySelector("#continuous-formation-import"), "click", () => this.importInput.click());
+    listen(this.importInput, "change", async () => {
+      const file = this.importInput.files?.[0];
+      this.importInput.value = "";
+      if (!file) return;
+      await this.attemptAsync(async () => {
+        const imported = importContinuousFormationLibrary(await file.text());
+        this.formation = validateContinuousFormationLibrary(this.onSave(imported));
+        this.onChange(this.formation); this.render();
+        this.message.textContent = "六輪站位匯入成功並已儲存。";
+      });
+    });
     this.render();
   }
 
+  get rotation() { return this.rotationSelect.value || CONTINUOUS_FORMATION_ROTATIONS[0]; }
+
   get mode() { return this.modeSelect.value || CONTINUOUS_FORMATION_MODES.SERVE; }
 
+  get profile() { return this.formation.rotations[this.rotation].profiles; }
+
   get selected() {
-    return this.formation.profiles[this.mode].find((entry) => entry.position === this.select.value);
+    return this.profile[this.mode].find((entry) => entry.position === this.select.value);
   }
 
   attempt(handler) {
     try { handler(); } catch (error) { this.message.textContent = `站位未套用：${error.message}`; }
+  }
+
+  async attemptAsync(handler) {
+    try { await handler(); } catch (error) { this.message.textContent = `站位未套用：${error.message}`; }
+  }
+
+  persist() {
+    this.formation = validateContinuousFormationLibrary(this.onSave(this.formation));
+    this.onChange(this.formation); this.render();
   }
 
   updateSelected(point, constrainDrag = false) {
@@ -89,9 +127,10 @@ export class ContinuousFormationEditor {
     if (!constrainDrag && (Math.abs(legalPoint.x - point.x) > 1e-7 || Math.abs(legalPoint.y - point.y) > 1e-7)) {
       throw new RangeError("輸入座標超出 R1 合法半場範圍。");
     }
-    this.formation = updateContinuousFormationPosition(this.formation, this.mode, this.select.value, legalPoint);
-    this.onChange(this.formation); this.render();
-    this.message.textContent = `${this.mode}/${this.select.value} 已更新；尚未儲存。`;
+    this.formation = updateContinuousFormationLibraryPosition(this.formation,
+      this.rotation, this.mode, this.select.value, legalPoint);
+    this.persist();
+    this.message.textContent = `${this.rotation}/${this.mode}/${this.select.value} 已更新並自動儲存。`;
   }
 
   endDrag() {
@@ -106,11 +145,11 @@ export class ContinuousFormationEditor {
   }
 
   render() {
-    const selected = this.selected ?? this.formation.profiles[this.mode][0];
+    const selected = this.selected ?? this.profile[this.mode][0];
     if (!this.select.value) this.select.value = selected.position;
     this.xInput.value = String(selected.x); this.yInput.value = String(selected.y);
     for (const marker of this.overlay.querySelectorAll("[data-player-id]")) {
-      const player = this.formation.profiles[this.mode]
+      const player = this.profile[this.mode]
         .find((entry) => entry.position === marker.dataset.playerId);
       marker.textContent = player.position;
       marker.classList.toggle("is-selected", player.position === selected.position);
