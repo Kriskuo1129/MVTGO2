@@ -60,12 +60,12 @@ function createDefaultFormation() {
       { position: "MB2", x: 1545.7291666666665, y: 465.36946614583326 },
     ],
     DEFENSE: [
-      { position: "S", x: 1604.1037735849056, y: 325 },
-      { position: "OH1", x: 1320, y: 690 },
-      { position: "MB1", x: 1320, y: 450 },
-      { position: "OP", x: 1320, y: 325 },
-      { position: "OH2", x: 1631.2264150943397, y: 450 },
-      { position: "MB2", x: 1683.301886792453, y: 690 },
+      { position: "S", x: 1466.6666666666667, y: 325 },
+      { position: "OH1", x: 1205, y: 325 },
+      { position: "MB1", x: 1205, y: 491.25 },
+      { position: "OP", x: 1205, y: 657.9166666666667 },
+      { position: "OH2", x: 1613.3333333333335, y: 444.58333333333337 },
+      { position: "MB2", x: 1500, y: 664.5833333333334 },
     ],
   };
   return Object.freeze({ version: CONTINUOUS_FORMATION_VERSION,

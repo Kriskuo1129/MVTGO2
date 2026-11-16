@@ -91,7 +91,7 @@ for (let index = 1; index < touches.length; index += 1) {
 for (const event of first.events.filter((entry) => entry.type === "RECEIVE_ERROR")) {
   assert.ok(event.trajectory.duration > 0 && event.trajectory.arcHeight > 0);
 }
-for (const [seed, team, direction] of [[11, "HOME", -1], [12, "AWAY", 1]]) {
+for (const [seed, team, direction] of [[11, "HOME", -1], [1, "AWAY", 1]]) {
   const errorSnapshot = run({ seed }).snapshot;
   const errorEvent = errorSnapshot.events.find((event) => event.type === "RECEIVE_ERROR"
     && event.team === team);
@@ -104,7 +104,7 @@ for (const [seed, team, direction] of [[11, "HOME", -1], [12, "AWAY", 1]]) {
 }
 const seed2 = run({ seed: 2 }).snapshot;
 assert.equal(seed2.status, "ENDED", "真實跑位後 Seed 2 仍須安全完成，不要求保留舊版強制多拍結果。");
-const missedSet = run({ seed: 29 }).snapshot;
+const missedSet = run({ seed: 37 }).snapshot;
 assert.equal(missedSet.rallyResult.reason, "SET_MISSED");
 assert.equal(missedSet.secondTouchResult.success, false);
 assert.equal(missedSet.secondTouchResult.reason, "SETTER_UNREACHABLE");
@@ -114,9 +114,9 @@ assert.ok(missedSet.setContactDiagnostic.normalizedDistance > 1,
 const net = run({ seed: 3 }).snapshot;
 assert.equal(net.rallyResult.reason, "ATTACK_NET");
 assert.equal(net.rallyResult.scoringTeam, "HOME");
-const landed = run({ seed: 5 }).snapshot;
+const landed = run({ seed: 2 }).snapshot;
 assert.equal(landed.rallyResult.reason, "BALL_LANDED");
-const outRun = run({ seed: 7 });
+const outRun = run({ seed: 10 });
 assert.equal(outRun.snapshot.rallyResult.reason, "BALL_OUT");
 assert.ok(outRun.observed.finishing.some((snapshot) => snapshot.finishing.bounceCount > 0));
 const illegal = new ContinuousRallySimulator({ seed: 7 });
