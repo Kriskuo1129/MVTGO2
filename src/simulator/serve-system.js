@@ -2,15 +2,20 @@ import { getAttackSpeedWeights } from "./attack-resolution.js";
 import { getSpikeReferenceSpeed, selectWeighted } from "./attack-quality.js";
 import { sampleUniformQuadrilateral } from "./attack-resolution.js";
 import { SPIKE_COURT_V1 } from "./spike-court.js";
+import {
+  LEGACY_SERVE_TYPES,
+  SERVE_ACTION_TIMING,
+  SERVE_GEOMETRY_CONFIG,
+  SERVE_PROFILES,
+  SERVE_TARGET_WEIGHTS,
+  SERVE_TYPES_CONFIG,
+} from "./config/serve-config.js";
 
-export const SIMULATOR_SERVE_TYPES = Object.freeze({ STANDING: "STANDING", JUMP: "JUMP" });
-export const LEGACY_SERVE_TYPE_MAP = Object.freeze({ 一般: "STANDING", 跳飄: "JUMP", 跳發: "JUMP" });
-export const SERVE_PHASE_TIMING = Object.freeze({ prepare: 0.18, contact: 0.08, followThrough: 0.42 });
-export const SERVE_TYPE_CONFIG = Object.freeze({
-  STANDING: Object.freeze({ speedFactors: Object.freeze({ SLOW: 1.6, NORMAL: 1.15, FAST: 0.35 }), arcHeight: 305, control: 1.35, tossDuration: 0.72, tossArcHeight: 105, contactHeight: 132 }),
-  JUMP: Object.freeze({ speedFactors: Object.freeze({ SLOW: 0.55, NORMAL: 1, FAST: 1.45 }), arcHeight: 215, control: 0.76, tossDuration: 1.02, tossArcHeight: 235, contactHeight: 205 }),
-});
-export const SERVE_TARGET_ZONE_WEIGHTS = Object.freeze({ BACK: 80, FRONT: 20 });
+export const SIMULATOR_SERVE_TYPES = SERVE_TYPES_CONFIG;
+export const LEGACY_SERVE_TYPE_MAP = LEGACY_SERVE_TYPES;
+export const SERVE_PHASE_TIMING = SERVE_ACTION_TIMING;
+export const SERVE_TYPE_CONFIG = SERVE_PROFILES;
+export const SERVE_TARGET_ZONE_WEIGHTS = SERVE_TARGET_WEIGHTS;
 
 const mirrorX = (x, court = SPIKE_COURT_V1) => court.world.width - x;
 const normalize = (weights) => {
@@ -53,25 +58,29 @@ export function getServeSpeedWeights(ability, serveTypeInput) {
 
 export function getServePosition(team, y = 450, court = SPIKE_COURT_V1) {
   if (!['HOME', 'AWAY'].includes(team)) throw new RangeError("發球隊伍必須為 HOME 或 AWAY。");
-  return Object.freeze({ x: team === "HOME" ? court.bounds.minX - 105 : court.bounds.maxX + 105, y });
+  return Object.freeze({ x: team === "HOME"
+    ? court.bounds.minX - SERVE_GEOMETRY_CONFIG.outsideBaselineDistance
+    : court.bounds.maxX + SERVE_GEOMETRY_CONFIG.outsideBaselineDistance, y });
 }
 
 export function createServeToss({ team, serveType: input, position }) {
   const serveType = normalizeServeType(input), config = SERVE_TYPE_CONFIG[serveType];
-  const x = position.x + (team === "HOME" ? 64 : -64);
-  return Object.freeze({ start: Object.freeze({ x, y: position.y, height: 62 }),
-    target: Object.freeze({ x, y: position.y, height: 32.5 }), duration: config.tossDuration,
+  const x = position.x + (team === "HOME" ? 1 : -1) * SERVE_GEOMETRY_CONFIG.tossForwardDistance;
+  return Object.freeze({ start: Object.freeze({ x, y: position.y,
+    height: SERVE_GEOMETRY_CONFIG.tossStartHeight }),
+    target: Object.freeze({ x, y: position.y, height: SERVE_GEOMETRY_CONFIG.targetHeight }), duration: config.tossDuration,
     arcHeight: config.tossArcHeight });
 }
 
 export function detectServeContact({ previousBall, currentBall, previousPlayer, currentPlayer,
-  serveType: input, team, ballRadius = 32.5, avatarRadius = 65 }) {
+  serveType: input, team, ballRadius = SERVE_GEOMETRY_CONFIG.defaultBallRadius,
+  avatarRadius = SERVE_GEOMETRY_CONFIG.defaultAvatarRadius }) {
   const serveType = normalizeServeType(input), config = SERVE_TYPE_CONFIG[serveType];
   if (currentBall.height >= previousBall.height - Number.EPSILON) return Object.freeze({ contacted: false, reason: "NOT_DESCENDING" });
   const direction = team === "HOME" ? 1 : -1;
   let best = null;
-  for (let index = 0; index <= 12; index += 1) {
-    const t = index / 12;
+  for (let index = 0; index <= SERVE_GEOMETRY_CONFIG.contactSamples; index += 1) {
+    const t = index / SERVE_GEOMETRY_CONFIG.contactSamples;
     const ballX = previousBall.x + (currentBall.x - previousBall.x) * t;
     const ballScreenY = previousBall.y - previousBall.height
       + ((currentBall.y - currentBall.height) - (previousBall.y - previousBall.height)) * t;
@@ -79,15 +88,16 @@ export function detectServeContact({ previousBall, currentBall, previousPlayer, 
     const playerScreenY = previousPlayer.y - (previousPlayer.jumpHeight ?? 0)
       + ((currentPlayer.y - (currentPlayer.jumpHeight ?? 0))
         - (previousPlayer.y - (previousPlayer.jumpHeight ?? 0))) * t;
-    const anchorX = playerX + direction * avatarRadius * 0.78;
-    const anchorY = playerScreenY - avatarRadius * 0.55;
+    const anchorX = playerX + direction * avatarRadius * SERVE_GEOMETRY_CONFIG.anchorHorizontalScale;
+    const anchorY = playerScreenY - avatarRadius * SERVE_GEOMETRY_CONFIG.anchorVerticalScale;
     const distance = Math.hypot(ballX - anchorX, ballScreenY - anchorY);
     if (!best || distance < best.distance) best = { t, distance, playerScreenY };
   }
-  if (best.distance > ballRadius + 16) return Object.freeze({ contacted: false, reason: "OUTSIDE_CONTACT_GEOMETRY", distance: best.distance });
+  if (best.distance > ballRadius + SERVE_GEOMETRY_CONFIG.contactDistancePadding) return Object.freeze({ contacted: false, reason: "OUTSIDE_CONTACT_GEOMETRY", distance: best.distance });
   const ballHeight = previousBall.height + (currentBall.height - previousBall.height) * best.t;
   if (serveType === SIMULATOR_SERVE_TYPES.JUMP
-    && (best.playerScreenY >= previousPlayer.y - 8 || ballHeight < config.contactHeight - 45)) {
+    && (best.playerScreenY >= previousPlayer.y - SERVE_GEOMETRY_CONFIG.jumpScreenClearance
+      || ballHeight < config.contactHeight - SERVE_GEOMETRY_CONFIG.jumpHeightTolerance)) {
     return Object.freeze({ contacted: false, reason: "JUMP_CONTACT_TOO_LOW", distance: best.distance });
   }
   return Object.freeze({ contacted: true, t: best.t, distance: best.distance,
@@ -109,21 +119,23 @@ export function resolveServeLaunch({ team, server, random, manualTarget = null,
   const leftTarget = sampleUniformQuadrilateral(manualTarget
     ? court.leftLandingPolygon : getServeTargetZones(court)[targetZone], random);
   const sampled = team === "HOME" ? { x: mirrorX(leftTarget.x, court), y: leftTarget.y } : leftTarget;
-  const controlSpread = (100 - server.serveAbility) * 1.65 / config.control;
+  const controlSpread = (100 - server.serveAbility)
+    * SERVE_GEOMETRY_CONFIG.controlSpreadCoefficient / config.control;
   const spreadTarget = { x: sampled.x + (random() * 2 - 1) * controlSpread,
     y: sampled.y + (random() * 2 - 1) * controlSpread };
   const target = manualTarget ? { x: manualTarget.x, y: manualTarget.y }
-    : { x: team === "HOME" ? Math.max(court.netX + 1, spreadTarget.x)
-      : Math.min(court.netX - 1, spreadTarget.x), y: spreadTarget.y };
+    : { x: team === "HOME" ? Math.max(court.netX + SERVE_GEOMETRY_CONFIG.netTargetMargin, spreadTarget.x)
+      : Math.min(court.netX - SERVE_GEOMETRY_CONFIG.netTargetMargin, spreadTarget.x), y: spreadTarget.y };
   const position = getServePosition(team, target.y, court);
-  const contact = contactPoint ?? Object.freeze({ x: position.x + (team === "HOME" ? 64 : -64), y: position.y,
+  const contact = contactPoint ?? Object.freeze({ x: position.x
+    + (team === "HOME" ? 1 : -1) * SERVE_GEOMETRY_CONFIG.tossForwardDistance, y: position.y,
     height: config.contactHeight });
   const distance = Math.hypot(target.x - contact.x, target.y - contact.y);
   const duration = distance / getSpikeReferenceSpeed(speedLevel);
   return Object.freeze({ team, serverId: server.id, serveType,
     ability: server.serveAbility, speedLevel, speedWeights: weights, targetZone, start: contact, contact,
-    target: Object.freeze({ ...target, height: 32.5 }), duration,
-    arcHeight: config.arcHeight + (random() * 2 - 1) * 24 });
+    target: Object.freeze({ ...target, height: SERVE_GEOMETRY_CONFIG.targetHeight }), duration,
+    arcHeight: config.arcHeight + (random() * 2 - 1) * SERVE_GEOMETRY_CONFIG.arcVariance });
 }
 
 export function detectServeNetContact(ball, fromProgress, toProgress, radius,

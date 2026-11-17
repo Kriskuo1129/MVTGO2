@@ -1,0 +1,249 @@
+import { createSeededRandom } from "./attack-quality.js";
+import { createFormalRallyAdapter } from "./formal-rally-adapter.js";
+import { validateFormalRallyTeams } from "./formal-rally-player-input.js";
+import { nextRallyRotation } from "./rotation-config.js";
+import { FORMAL_MATCH_RULES } from "./config/rally-config.js";
+
+export const FORMAL_MATCH_STATES = Object.freeze({
+  NOT_STARTED: "NOT_STARTED",
+  RALLY_RUNNING: "RALLY_RUNNING",
+  RALLY_ENDED: "RALLY_ENDED",
+  BETWEEN_SETS: "BETWEEN_SETS",
+  MATCH_ENDED: "MATCH_ENDED",
+  ABORTED: "ABORTED",
+});
+
+const TEAMS = Object.freeze(["HOME", "AWAY"]);
+const opposite = (team) => team === "HOME" ? "AWAY" : "HOME";
+const freezeScores = (scores) => Object.freeze({ HOME: scores.HOME, AWAY: scores.AWAY });
+
+function validateSeed(seed) {
+  if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    throw new RangeError("Match Seed 必須是 0～4294967295 的整數。");
+  }
+  return seed >>> 0;
+}
+
+function setHasWinner(scores, target) {
+  const leader = scores.HOME > scores.AWAY ? "HOME" : scores.AWAY > scores.HOME ? "AWAY" : null;
+  if (!leader) return null;
+  return scores[leader] >= target
+    && scores[leader] - scores[opposite(leader)] >= FORMAL_MATCH_RULES.minimumWinningMargin
+    ? leader : null;
+}
+
+export class FormalMatchSession {
+  constructor({ teams, seed = 1, rallyAdapterFactory = createFormalRallyAdapter,
+    parameters, fixedStep, formationLibrary,
+    maximumRallySimulationTime = FORMAL_MATCH_RULES.maximumRallySimulationTime,
+    maximumMatchRallies = FORMAL_MATCH_RULES.maximumMatchRallies } = {}) {
+    this.playerInput = validateFormalRallyTeams(teams);
+    this.matchSeed = validateSeed(seed);
+    if (typeof rallyAdapterFactory !== "function") throw new TypeError("rallyAdapterFactory 必須是函式。");
+    if (!(maximumRallySimulationTime > 0) || !Number.isFinite(maximumRallySimulationTime)) {
+      throw new RangeError("Rally 模擬安全上限必須是正有限秒數。");
+    }
+    if (!Number.isInteger(maximumMatchRallies) || maximumMatchRallies < 1) {
+      throw new RangeError("Match Rally 安全上限必須是正整數。");
+    }
+    this.rallyAdapterFactory = rallyAdapterFactory;
+    this.adapterOptions = Object.freeze({ parameters, fixedStep, formationLibrary });
+    this.maximumRallySimulationTime = maximumRallySimulationTime;
+    this.maximumMatchRallies = maximumMatchRallies;
+    this.reset();
+  }
+
+  reset() {
+    this.status = FORMAL_MATCH_STATES.NOT_STARTED;
+    this.currentSetNumber = 0;
+    this.setScores = { HOME: 0, AWAY: 0 };
+    this.setsWon = { HOME: 0, AWAY: 0 };
+    this.rotations = { HOME: "R1", AWAY: "R1" };
+    this.servingTeam = null;
+    this.firstSetServingTeam = null;
+    this.rallyNumber = 0;
+    this.setRallyNumber = 0;
+    this.currentRallySeed = null;
+    this.currentRally = null;
+    this.setResults = [];
+    this.rallyResults = [];
+    this.events = [];
+    this.matchResult = null;
+    this.fault = null;
+    this.usedRallySeeds = new Set();
+    this.random = createSeededRandom(this.matchSeed);
+    return this.getSnapshot();
+  }
+
+  nextRandomUint32() { return Math.floor(this.random() * 0x100000000) >>> 0; }
+
+  drawServingTeam() { return this.random() < 0.5 ? "HOME" : "AWAY"; }
+
+  nextRallySeed() {
+    let seed = this.nextRandomUint32();
+    while (this.usedRallySeeds.has(seed)) seed = (seed + 0x9e3779b9) >>> 0;
+    this.usedRallySeeds.add(seed);
+    return seed;
+  }
+
+  start() {
+    if (this.status !== FORMAL_MATCH_STATES.NOT_STARTED) {
+      throw new Error("正式比賽已開始；如需重開請建立新 Session 或先呼叫 reset()。 ");
+    }
+    this.events.push(Object.freeze({ type: "MATCH_STARTED", seed: this.matchSeed }));
+    this.startSet(1);
+    this.startRally();
+    return this.getSnapshot();
+  }
+
+  startSet(setNumber) {
+    this.currentSetNumber = setNumber;
+    this.setScores = { HOME: 0, AWAY: 0 };
+    this.rotations = { HOME: "R1", AWAY: "R1" };
+    this.setRallyNumber = 0;
+    if (setNumber === 1) {
+      this.firstSetServingTeam = this.drawServingTeam();
+      this.servingTeam = this.firstSetServingTeam;
+    } else if (setNumber === 2) {
+      this.servingTeam = opposite(this.firstSetServingTeam);
+    } else {
+      this.servingTeam = this.drawServingTeam();
+    }
+    this.events.push(Object.freeze({ type: "SET_STARTED", setNumber,
+      targetPoints: FORMAL_MATCH_RULES.setTargetPoints[setNumber - 1],
+      servingTeam: this.servingTeam }));
+  }
+
+  startRally() {
+    if (this.status === FORMAL_MATCH_STATES.MATCH_ENDED
+      || this.status === FORMAL_MATCH_STATES.ABORTED) return false;
+    if (this.rallyNumber >= this.maximumMatchRallies) {
+      this.abort("MATCH_RALLY_LIMIT", `比賽超過 ${this.maximumMatchRallies} 球安全上限。`);
+      return false;
+    }
+    this.rallyNumber += 1;
+    this.setRallyNumber += 1;
+    this.currentRallySeed = this.nextRallySeed();
+    const options = { teams: this.playerInput.teams, rotations: { ...this.rotations },
+      servingTeam: this.servingTeam, seed: this.currentRallySeed };
+    for (const [key, value] of Object.entries(this.adapterOptions)) {
+      if (value !== undefined) options[key] = value;
+    }
+    this.currentRally = this.rallyAdapterFactory(options);
+    if (!this.currentRally || typeof this.currentRally.start !== "function"
+      || typeof this.currentRally.advance !== "function") {
+      throw new TypeError("rallyAdapterFactory 必須回傳 Formal Rally Adapter 相容物件。");
+    }
+    this.currentRally.start();
+    this.status = FORMAL_MATCH_STATES.RALLY_RUNNING;
+    this.events.push(Object.freeze({ type: "RALLY_STARTED", setNumber: this.currentSetNumber,
+      setRallyNumber: this.setRallyNumber, rallyNumber: this.rallyNumber,
+      seed: this.currentRallySeed, servingTeam: this.servingTeam,
+      rotations: Object.freeze({ ...this.rotations }) }));
+    return true;
+  }
+
+  advance(deltaSeconds) {
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+      throw new RangeError("推進時間必須是非負有限秒數。");
+    }
+    if (this.status === FORMAL_MATCH_STATES.NOT_STARTED
+      || this.status === FORMAL_MATCH_STATES.MATCH_ENDED
+      || this.status === FORMAL_MATCH_STATES.ABORTED) return this.getSnapshot();
+    if (this.status === FORMAL_MATCH_STATES.RALLY_ENDED) {
+      this.startRally();
+      return this.getSnapshot();
+    }
+    if (this.status === FORMAL_MATCH_STATES.BETWEEN_SETS) {
+      this.startSet(this.currentSetNumber + 1);
+      this.startRally();
+      return this.getSnapshot();
+    }
+    const rallySnapshot = this.currentRally.advance(deltaSeconds);
+    if (rallySnapshot.simulationTime > this.maximumRallySimulationTime) {
+      this.abort("RALLY_TIME_LIMIT", `Rally ${this.rallyNumber} 超過模擬時間安全上限。`);
+      return this.getSnapshot();
+    }
+    if (rallySnapshot.status === "ENDED") this.settleCurrentRally();
+    return this.getSnapshot();
+  }
+
+  settleCurrentRally() {
+    if (this.status !== FORMAL_MATCH_STATES.RALLY_RUNNING) return false;
+    const result = this.currentRally.getResult();
+    if (!TEAMS.includes(result?.scoringTeam)) {
+      this.abort("INVALID_RALLY_RESULT", "Continuous Rally 結束但缺少合法得分方。");
+      return false;
+    }
+    const servingTeam = this.servingTeam;
+    const rotationsBefore = Object.freeze({ ...this.rotations });
+    this.setScores[result.scoringTeam] += 1;
+    if (result.scoringTeam !== servingTeam) {
+      this.rotations[result.scoringTeam] = nextRallyRotation(this.rotations[result.scoringTeam]);
+    }
+    this.servingTeam = result.scoringTeam;
+    const record = Object.freeze({ setNumber: this.currentSetNumber,
+      setRallyNumber: this.setRallyNumber, rallyNumber: this.rallyNumber,
+      seed: this.currentRallySeed, servingTeam, scoringTeam: result.scoringTeam,
+      reason: result.reason, score: freezeScores(this.setScores), rotationsBefore,
+      rotationsAfter: Object.freeze({ ...this.rotations }),
+      events: this.currentRally.getEvents() });
+    this.rallyResults.push(record);
+    this.events.push(Object.freeze({ type: "RALLY_SETTLED", setNumber: record.setNumber,
+      setRallyNumber: record.setRallyNumber, rallyNumber: record.rallyNumber,
+      seed: record.seed, servingTeam: record.servingTeam, scoringTeam: record.scoringTeam,
+      reason: record.reason, score: record.score, rotationsBefore: record.rotationsBefore,
+      rotationsAfter: record.rotationsAfter }));
+    const target = FORMAL_MATCH_RULES.setTargetPoints[this.currentSetNumber - 1];
+    const setWinner = setHasWinner(this.setScores, target);
+    if (setWinner) this.finishSet(setWinner, target);
+    else this.status = FORMAL_MATCH_STATES.RALLY_ENDED;
+    return true;
+  }
+
+  finishSet(winner, targetPoints) {
+    this.setsWon[winner] += 1;
+    const setResult = Object.freeze({ setNumber: this.currentSetNumber, winner,
+      targetPoints, initialServingTeam: this.events.find((event) => event.type === "SET_STARTED"
+        && event.setNumber === this.currentSetNumber)?.servingTeam ?? null,
+      score: freezeScores(this.setScores), rallyCount: this.setRallyNumber });
+    this.setResults.push(setResult);
+    this.events.push(Object.freeze({ type: "SET_ENDED", ...setResult }));
+    if (this.setsWon[winner] >= FORMAL_MATCH_RULES.setsToWin) {
+      this.status = FORMAL_MATCH_STATES.MATCH_ENDED;
+      this.matchResult = Object.freeze({ winner, seed: this.matchSeed,
+        setsWon: freezeScores(this.setsWon), sets: Object.freeze([...this.setResults]),
+        rallyCount: this.rallyNumber });
+      this.events.push(Object.freeze({ type: "MATCH_ENDED", ...this.matchResult }));
+    } else {
+      this.status = FORMAL_MATCH_STATES.BETWEEN_SETS;
+    }
+  }
+
+  abort(code, message) {
+    this.status = FORMAL_MATCH_STATES.ABORTED;
+    this.fault = Object.freeze({ code, message, setNumber: this.currentSetNumber,
+      rallyNumber: this.rallyNumber, seed: this.currentRallySeed });
+    this.events.push(Object.freeze({ type: "MATCH_ABORTED", ...this.fault }));
+  }
+
+  isEnded() { return this.status === FORMAL_MATCH_STATES.MATCH_ENDED; }
+  getRallySnapshot() { return this.currentRally?.getSnapshot() ?? null; }
+  getRallyResult() { return this.currentRally?.getResult() ?? null; }
+  getRallyEvents() { return this.currentRally?.getEvents() ?? Object.freeze([]); }
+  getRallyResults() { return Object.freeze([...this.rallyResults]); }
+  getSetResults() { return Object.freeze([...this.setResults]); }
+  getMatchResult() { return this.matchResult; }
+  getEvents() { return Object.freeze([...this.events]); }
+
+  getSnapshot() {
+    return Object.freeze({ status: this.status, seed: this.matchSeed,
+      currentSetNumber: this.currentSetNumber, setScores: freezeScores(this.setScores),
+      setsWon: freezeScores(this.setsWon), servingTeam: this.servingTeam,
+      rotations: Object.freeze({ ...this.rotations }), rallyNumber: this.rallyNumber,
+      setRallyNumber: this.setRallyNumber, currentRallySeed: this.currentRallySeed,
+      rally: this.getRallySnapshot(), rallyResult: this.getRallyResult(),
+      rallyResults: this.getRallyResults(), setResults: this.getSetResults(), matchResult: this.matchResult,
+      fault: this.fault, events: this.getEvents() });
+  }
+}

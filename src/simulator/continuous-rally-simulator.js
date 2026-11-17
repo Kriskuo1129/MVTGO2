@@ -8,7 +8,8 @@ import { createNaturalPredictionBall, createTargetedNaturalSpikeLaunch, getGroun
   NATURAL_SPIKE_PHYSICS_V1, sampleNaturalStep } from "./natural-spike-flight.js";
 import { createSimulatorPlayer, decideChaseTarget, predictReachableContact, stepSimulatorPlayer } from "./player-agent.js";
 import { PASS_TARGET_ZONES_V1, createPassTargetZones, samplePassTarget } from "./pass-target-zones.js";
-import { createReceiveErrorTrajectory, RECEIVE_RESULTS, resolveReceiveContact } from "./receive-quality.js";
+import { createReceiveErrorTrajectory, RECEIVE_RESULTS, resolveReceiveContact,
+  SECOND_PASS_TRAJECTORY_CONFIG, SECOND_TOUCH_TRAJECTORY_TUNING } from "./receive-quality.js";
 import { getReceiveSpeedProfile } from "./receive-animation.js";
 import { SIMULATOR_CONTACT_ANCHOR_DISTANCE, SIMULATOR_FIXED_STEP, SIMULATOR_MAX_FRAME_DELTA,
   SIMULATOR_MAXIMUM_CONTACT_HEIGHT, SIMULATOR_WORLD, validateSimulatorParameters } from "./simulator.js";
@@ -32,14 +33,19 @@ import { createR1AttackPlan, getR1AttackConfigurations,
 import { createBlockRebound, detectSweptBlockContact,
   R1_BLOCK_PHYSICS_V1, sampleBlockJump } from "./r1-block.js";
 import { getRotationConfig } from "./rotation-config.js";
+import { RALLY_FLOW_CONFIG } from "./config/rally-config.js";
+import { PLAYER_CONTACT_CONFIG } from "./config/player-config.js";
+import { SERVE_GEOMETRY_CONFIG } from "./config/serve-config.js";
+import { ATTACK_CONTACT_PARAMETERS } from "./config/attack-config.js";
+import { validateFormalRallyTeams } from "./formal-rally-player-input.js";
 
 export const RALLY_TEAMS = Object.freeze({ HOME: "HOME", AWAY: "AWAY" });
 export const RALLY_PHASES = Object.freeze({ SERVE: "SERVE", RECEIVE: "RECEIVE", SET: "SET",
   SERVE_PREPARE: "SERVE_PREPARE", SERVE_FLIGHT: "SERVE_FLIGHT",
   ATTACK: "ATTACK", ATTACK_FLIGHT: "ATTACK_FLIGHT", FINISHING: "FINISHING", ENDED: "ENDED" });
 
-const FINISHING_HOLD_DURATION = 0.35;
-const FINISHING_MAX_DURATION = 3;
+const FINISHING_HOLD_DURATION = RALLY_FLOW_CONFIG.finishingHoldDuration;
+const FINISHING_MAX_DURATION = RALLY_FLOW_CONFIG.finishingMaximumDuration;
 
 const mirrorX = (x) => SIMULATOR_WORLD.width - x;
 const opposite = (team) => team === RALLY_TEAMS.HOME ? RALLY_TEAMS.AWAY : RALLY_TEAMS.HOME;
@@ -53,7 +59,7 @@ function isOpponentGroundIn(point, radius, attackingTeam) {
     : { ...point, x: mirrorX(point.x) }, radius, SPIKE_COURT_V1);
 }
 
-function createTeam(team, parameters, formation) {
+function createLegacyTestTeam(team, parameters, formation) {
   return formation.teams[team].map((position, index) => {
     const entry = TEAM_RECEIVE_FORMATION.find((candidate) => candidate.position === position.position);
     return Object.assign(createSimulatorPlayer({ ...entry, id: position.playerId,
@@ -68,11 +74,37 @@ function createTeam(team, parameters, formation) {
   });
 }
 
+function createExternalTeam(team, parameters, formation, playerInput) {
+  const lineup = playerInput.teams[team];
+  return formation.teams[team].map((position) => {
+    const entry = lineup.find((candidate) => candidate.job === position.position);
+    if (!entry) throw new Error(`${team} 缺少 ${position.position} Job 球員。`);
+    return Object.assign(createSimulatorPlayer({ id: entry.playerId, position: entry.position,
+      rotationPosition: entry.job, x: position.x, y: position.y,
+      moveSpeed: parameters.playerSpeed }), {
+      team, playerId: entry.playerId, name: entry.name, job: entry.job,
+      abilities: entry.abilities, mood: entry.mood,
+      formalServeType: entry.serveType, avatar: entry.avatar,
+      receiveAbility: entry.abilities.receive,
+      serveAbility: entry.abilities.serve,
+      setAbility: entry.abilities.set,
+      blockAbility: entry.abilities.block,
+      attack: entry.abilities.attack,
+      attackConsistency: entry.simulationOverrides.attackConsistency,
+      morale: entry.simulationOverrides.morale,
+      serveType: entry.simulationOverrides.serveType,
+      responsibility: "HOLD", touchEligible: false, receivePreparationTime: 0,
+      currentWork: null, workRevision: 0,
+    });
+  });
+}
+
 export class ContinuousRallySimulator {
   constructor({ parameters = TEAM_SIMULATOR_PARAMETERS, fixedStep = SIMULATOR_FIXED_STEP,
     seed = 2, initialFormation = null, formationLibrary = DEFAULT_CONTINUOUS_FORMATION_LIBRARY,
     rotations = { HOME: "R1", AWAY: "R1" },
-    servingTeam = RALLY_TEAMS.HOME, serverPlayerId = null, serveMode = "FORMAL" } = {}) {
+    servingTeam = RALLY_TEAMS.HOME, serverPlayerId = null, serveMode = "FORMAL",
+    teams = null } = {}) {
     this.fixedStep = fixedStep;
     this.seed = seed >>> 0;
     this.parameters = validateSimulatorParameters(parameters);
@@ -80,6 +112,8 @@ export class ContinuousRallySimulator {
       ? createContinuousFormationLibrary(validateContinuousFormation(initialFormation))
       : validateContinuousFormationLibrary(formationLibrary);
     this.teamRotations = this.validateRotations(rotations);
+    this.externalPlayerInput = teams === null ? null : validateFormalRallyTeams(teams);
+    this.playerInputMode = this.externalPlayerInput ? "EXTERNAL" : "LEGACY_TEST";
     this.initialFormation = getContinuousRotationFormation(this.formationLibrary, "R1");
     this.serveConfiguration = { servingTeam, serverPlayerId, serveMode };
     this.reset();
@@ -121,8 +155,10 @@ export class ContinuousRallySimulator {
       [team, resolveContinuousFormationProfile(rotationFormations[team], "RECEIVE")[team]])));
     this.rallyDefenseFormation = Object.freeze(Object.fromEntries(Object.values(RALLY_TEAMS).map((team) =>
       [team, resolveContinuousFormationProfile(rotationFormations[team], "DEFENSE")[team]])));
-    this.players = [...createTeam(RALLY_TEAMS.HOME, this.parameters, rallyFormation),
-      ...createTeam(RALLY_TEAMS.AWAY, this.parameters, rallyFormation)];
+    const createPlayers = this.externalPlayerInput
+      ? (team) => createExternalTeam(team, this.parameters, rallyFormation, this.externalPlayerInput)
+      : (team) => createLegacyTestTeam(team, this.parameters, rallyFormation);
+    this.players = [...createPlayers(RALLY_TEAMS.HOME), ...createPlayers(RALLY_TEAMS.AWAY)];
     this.activeTeam = RALLY_TEAMS.AWAY; this.lastTouchTeam = RALLY_TEAMS.HOME;
     this.teamTouches = { HOME: 0, AWAY: 0 }; this.lastTouchPlayerId = null;
     this.primaryReceiverId = null; this.receiveOutcome = null; this.receiveQualityResult = null;
@@ -140,8 +176,10 @@ export class ContinuousRallySimulator {
     this.workPlanRevision = 0;
     this.teamWorkPlans = { HOME: null, AWAY: null };
     this.receiveGeometry = createReceiveContactGeometry({ avatarWorldSize: TEAM_SIMULATOR_AVATAR_SIZE,
-      avatarContactScale: 0.78, ballWorldSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
-      minimumOverlapDepth: 10, contactTolerance: 10 });
+      avatarContactScale: PLAYER_CONTACT_CONFIG.receiveAvatarScale,
+      ballWorldSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
+      minimumOverlapDepth: PLAYER_CONTACT_CONFIG.receiveMinimumOverlapDepth,
+      contactTolerance: PLAYER_CONTACT_CONFIG.receiveTolerance });
   }
 
   configureServe({ servingTeam, serverPlayerId = null, ability = null, serveType = null }) {
@@ -309,8 +347,11 @@ export class ContinuousRallySimulator {
     server.action = server.serveType === SIMULATOR_SERVE_TYPES.JUMP ? "ATTACK" : "SERVE_PREPARE";
     if (server.serveType === SIMULATOR_SERVE_TYPES.JUMP) {
       this.serveMotion = createAttackMotion({ playerId: server.id, simulationTime: this.simulationTime,
-        predictedContactTime: this.simulationTime + this.serveToss.duration * 0.78,
-        parameters: { ...ATTACK_MOTION_V1, maximumHeight: 85, jumpDuration: this.serveToss.duration,
+        predictedContactTime: this.simulationTime
+          + this.serveToss.duration * SERVE_GEOMETRY_CONFIG.jumpMotionContactFraction,
+        parameters: { ...ATTACK_MOTION_V1,
+          maximumHeight: SERVE_GEOMETRY_CONFIG.jumpMotionMaximumHeight,
+          jumpDuration: this.serveToss.duration,
           direction: server.team === RALLY_TEAMS.HOME ? "RIGHT" : "LEFT" } });
     }
     this.rallyPhase = "SERVE_TOSS";
@@ -322,7 +363,8 @@ export class ContinuousRallySimulator {
     const server = this.player(this.serverPlayerId);
     const previousBall = { ...this.ball }, previousPlayer = { ...server };
     this.simulationTime += this.fixedStep;
-    if (this.serveMotion?.startedAt === null && this.ball.progress >= 0.42) {
+    if (this.serveMotion?.startedAt === null
+      && this.ball.progress >= SERVE_GEOMETRY_CONFIG.jumpMotionStartProgress) {
       this.serveMotion.startedAt = this.simulationTime;
     }
     if (this.serveMotion) updateAttackMotion(this.serveMotion, server, this.simulationTime);
@@ -367,9 +409,10 @@ export class ContinuousRallySimulator {
       const incoming = this.getCurrentBallVelocity();
       return this.endRally("SERVE_NET", opposite(this.lastTouchTeam), {
         finishingVelocity: {
-          x: incoming.x * 0.12,
-          y: incoming.y * 0.12,
-          height: Math.min(-80, incoming.height * 0.2),
+          x: incoming.x * SERVE_GEOMETRY_CONFIG.netFinishHorizontalRetention,
+          y: incoming.y * SERVE_GEOMETRY_CONFIG.netFinishHorizontalRetention,
+          height: Math.min(SERVE_GEOMETRY_CONFIG.netFinishMinimumDownwardSpeed,
+            incoming.height * SERVE_GEOMETRY_CONFIG.netFinishVerticalRetention),
         },
       });
     }
@@ -383,7 +426,9 @@ export class ContinuousRallySimulator {
     if (player.team !== this.activeTeam) return this.endRally("WRONG_TEAM_TOUCH", opposite(player.team));
     if (this.lastTouchPlayerId === player.id) return this.endRally("ILLEGAL_CONSECUTIVE_TOUCH", opposite(player.team));
     this.teamTouches[player.team] += 1;
-    if (this.teamTouches[player.team] > 3) return this.endRally("FOUR_TOUCHES", opposite(player.team));
+    if (this.teamTouches[player.team] > RALLY_FLOW_CONFIG.maximumTeamTouches) {
+      return this.endRally("FOUR_TOUCHES", opposite(player.team));
+    }
     this.lastTouchPlayerId = player.id; this.lastTouchTeam = player.team;
     this.events.push(Object.freeze({ type, time: this.simulationTime, team: player.team,
       job: player.job, playerId: player.id, touchNumber: this.teamTouches[player.team], ...details }));
@@ -396,7 +441,8 @@ export class ContinuousRallySimulator {
     if (player) {
       const prediction = predictReachableContact({ ball: this.ball, player,
         contactRange: this.parameters.contactRange, contactAnchorDistance: SIMULATOR_CONTACT_ANCHOR_DISTANCE,
-        maximumContactHeight: SIMULATOR_MAXIMUM_CONTACT_HEIGHT, sampleStep: 1 / 60,
+        maximumContactHeight: SIMULATOR_MAXIMUM_CONTACT_HEIGHT,
+        sampleStep: PLAYER_CONTACT_CONFIG.predictionSampleStep,
         contactGeometry: this.receiveGeometry });
       decideChaseTarget(player, prediction);
     }
@@ -438,9 +484,9 @@ export class ContinuousRallySimulator {
       this.prepareAttackPlan(player.team, player);
       const zones = player.team === RALLY_TEAMS.AWAY ? zonesRight : zonesLeft;
       const target = samplePassTarget(zones, this.receiveOutcome.quality, this.random);
+      const passTrajectory = SECOND_PASS_TRAJECTORY_CONFIG[this.receiveOutcome.quality];
       this.launchBallFlight({ start: { x: this.ball.x, y: this.ball.y, height: this.ball.height },
-        target, duration: this.receiveOutcome.quality === "PERFECT" ? 1.1 : 1.3,
-        arcHeight: this.receiveOutcome.quality === "PERFECT" ? 160 : 210 });
+        target, duration: passTrajectory.duration, arcHeight: passTrajectory.arcHeight });
       this.currentFlightKind = "PASS"; this.prepareSet(player.team, player); return;
     }
     if (this.ball.landed) {
@@ -474,7 +520,8 @@ export class ContinuousRallySimulator {
     const player = this.player(this.secondTouchPlayerId);
     const prediction = predictReachableContact({ ball: this.ball, player,
       contactRange: this.parameters.contactRange, contactAnchorDistance: SIMULATOR_CONTACT_ANCHOR_DISTANCE,
-      maximumContactHeight: SIMULATOR_MAXIMUM_CONTACT_HEIGHT, sampleStep: 1 / 60,
+      maximumContactHeight: SIMULATOR_MAXIMUM_CONTACT_HEIGHT,
+      sampleStep: PLAYER_CONTACT_CONFIG.predictionSampleStep,
       contactGeometry: TEAM_SET_CONTACT_GEOMETRY });
     this.setPrediction = Object.freeze({ ...prediction, team: player.team,
       playerId: player.id, receiveQuality: this.receiveOutcome?.quality ?? null });
@@ -533,7 +580,8 @@ export class ContinuousRallySimulator {
         ballHeight: contact.ballHeight, centerDistance: contact.centerDistance,
         effectiveAvatarRadius: contact.effectiveAvatarRadius, ballRadius: contact.ballRadius,
         overlapDepth: contact.overlapDepth });
-      player.actionUntil = this.simulationTime + 0.35;
+      player.actionUntil = this.simulationTime
+        + SECOND_TOUCH_TRAJECTORY_TUNING.successfulTouchAnimationDuration;
       if (!choice.selected) {
         this.attackPlan.status = "NO_FEASIBLE_CANDIDATE";
         this.events.push(Object.freeze({ type: "ATTACK_SELECTION_FAILED", time: this.simulationTime,
@@ -604,10 +652,12 @@ export class ContinuousRallySimulator {
     this.prepareBlock(opposite(team), selected.attackType, selected.attackPosition.y, team);
     const direction = team === RALLY_TEAMS.HOME ? "RIGHT" : "LEFT";
     this.attackGeometry = createAttackContactGeometry({ avatarWorldSize: TEAM_SIMULATOR_AVATAR_SIZE,
-      ballWorldSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE, contactHeight: 180, direction });
+      ballWorldSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
+      contactHeight: ATTACK_CONTACT_PARAMETERS.contactHeight, direction });
     const targetX = this.attackAssignment.attackPosition.x + this.attackGeometry.offset.x;
-    const targetHeight = 180 + ATTACK_MOTION_V1.maximumHeight;
-    const targetY = this.attackAssignment.attackPosition.y + this.attackGeometry.offset.y + 180;
+    const targetHeight = ATTACK_CONTACT_PARAMETERS.contactHeight + ATTACK_MOTION_V1.maximumHeight;
+    const targetY = this.attackAssignment.attackPosition.y + this.attackGeometry.offset.y
+      + ATTACK_CONTACT_PARAMETERS.contactHeight;
     this.launchBallFlight({ start: { x: this.ball.x, y: this.ball.y, height: this.ball.height },
       target: { x: targetX, y: targetY, height: targetHeight },
       duration: selected.setDuration, arcHeight: selected.setArcHeight });
@@ -1030,6 +1080,7 @@ export class ContinuousRallySimulator {
         attackPlayer.y - this.attackAssignment.attackPosition.y),
     }) : null;
     return Object.freeze({ status: this.status, rallyPhase: this.rallyPhase, activeTeam: this.activeTeam,
+      playerInputMode: this.playerInputMode,
       seed: this.seed, rotations: this.teamRotations,
       ballFlightId: this.ballFlightId,
       simulationTime: this.simulationTime, parameters: this.parameters, world: SIMULATOR_WORLD,
@@ -1042,7 +1093,8 @@ export class ContinuousRallySimulator {
       ball: Object.freeze({ ...this.ball, targetX: this.ball.target.x, targetY: this.ball.target.y }),
       players: Object.freeze(snapshotPlayers), events: Object.freeze([...this.events]),
       presentation: Object.freeze({ ballDisplaySize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE, ballOverlapRatio: 0.5,
-        receiveContactScale: 0.78 }), attackMotion: this.motion ? Object.freeze({ ...this.motion }) : null,
+        receiveContactScale: PLAYER_CONTACT_CONFIG.receiveAvatarScale }),
+      attackMotion: this.motion ? Object.freeze({ ...this.motion }) : null,
       attackAssignment,
       attackPlan: this.attackPlan ? Object.freeze({ ...this.attackPlan,
         candidates: Object.freeze(this.attackPlan.candidates.map((entry) => Object.freeze({ ...entry }))),

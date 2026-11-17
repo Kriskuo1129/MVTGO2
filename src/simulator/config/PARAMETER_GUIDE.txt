@@ -1,0 +1,313 @@
+MVTGO2 Continuous Rally 正式參數索引
+======================================
+
+用途
+----
+本資料夾集中 R1～R6 Continuous Rally 正式執行時使用的數值參數。
+開發者修改參數後，應以固定 Seed 重新建立 Simulator／Session，不可在 Rally 執行途中熱套用。
+
+本次只移動參數來源，沒有改變數值、運算順序或 RNG 呼叫順序。
+原模組仍保留既有 export 名稱，供既有測試與其他模組相容使用。
+
+單位
+----
+- world px：Simulator 世界座標，世界尺寸 2280 × 900。
+- 秒：模擬時間，不是 requestAnimationFrame frame 數。
+- world px/s、world px/s²：世界座標速度與加速度。
+- 權重／機率：除特別標示百分比外，依呼叫端正規化。
+
+
+一、player-config.js
+------------------
+
+SIMULATOR_WORLD_CONFIG
+- width = 2280 world px
+- height = 900 world px
+- 影響：所有球員、球、鏡像及 Camera 的世界座標基準。
+- 注意：不可只改此處而不驗證球場圖片、SPIKE_COURT_V1、Formation V4 與攻擊座標。
+
+SIMULATOR_TIMING_CONFIG
+- fixedStep = 1/120 秒；合法實驗範圍 0.001～0.1 秒。
+- maximumFrameDelta = 0.25 秒。
+- 影響：物理決定性與分頁切換保護。
+- 注意：修改 fixedStep 必須重跑 30／60／144 FPS 及 1,000 Seed 測試。
+
+PLAYER_PHYSICS_CONFIG
+- defaultAvatarSize = 150 world px（單人相容實驗）。
+- teamAvatarSize = 130 world px（六人／Continuous）。
+- moveSpeed = 300 world px/s。
+- contactRange = 84 world px。
+- initialX = 1140、initialY = 650 world px（單人相容實驗）。
+- avatarSize 合法範圍 32～160。
+- moveSpeed 合法範圍 20～1600。
+- contactRange 合法範圍 10～240。
+- 注意：teamAvatarSize 同時影響接觸幾何；不可視為純 CSS 尺寸。
+
+PLAYER_CONTACT_CONFIG
+- maximumReceiveHeight = 118 world px。
+- receiveAnchorDistance = 75 world px（舊接觸 API 相容值）。
+- predictionSampleStep = 1/60 秒。
+- receiveAvatarScale = 0.78。
+- ballOverlapRatio = 0.5。
+- receiveMinimumOverlapDepth = 10 world px。
+- receiveTolerance = 10 world px。
+- setHorizontalTolerance = 10 world px。
+- setVerticalTolerance = 16 world px。
+- 影響：預測器、RECEIVE／SET 掃掠碰撞與可見重疊。
+- 注意：尺寸、縮放、球半徑及 overlap 必須一起驗證，不能單獨放寬成功率。
+
+
+二、ball-config.js
+----------------
+
+BALL_CONFIG
+- teamDiameter = 65 world px；正式六人球直徑。
+- singlePlayerDisplayDiameter = 46 world px；單人相容實驗。
+- initial = (250, 450, height 72)；舊實驗／reset 初始球。
+- minimumLegacyFlightDuration = 0.7 秒。
+- maximumLegacyFlightDuration = 1.5 秒。
+- legacyHighArcHeight = 360 world px。
+- 注意：後三項屬舊指定球路相容值，不限制自然扣球。
+
+NATURAL_BALL_PHYSICS
+- gravity = 980 world px/s²。
+- verticalRestitution = 0.48。
+- horizontalBounceRetention = 0.72。
+- horizontalDampingPerSecond = 1.8。
+- minimumBounceSpeed = 70 world px/s。
+- restHorizontalSpeed = 18 world px/s。
+- netHorizontalRetention = 0.15。
+- netDownwardSpeed = 120 world px/s。
+- 影響：自然攻擊球路、落地反彈、BALL_REST 與碰網下墜。
+
+
+三、serve-config.js
+-----------------
+
+SERVE_TYPES_CONFIG
+- STANDING、JUMP：正式 Continuous 發球方式 enum，不是平衡值。
+
+LEGACY_SERVE_TYPES
+- 一般→STANDING、跳飄／跳發→JUMP。
+- 只供舊資料相容；不代表正式三種發球物理。
+
+SERVE_ACTION_TIMING（秒）
+- prepare = 0.18
+- contact = 0.08
+- followThrough = 0.42
+
+SERVE_PROFILES.STANDING
+- speedFactors：SLOW 1.6、NORMAL 1.15、FAST 0.35。
+- arcHeight = 305 world px。
+- control = 1.35。
+- tossDuration = 0.72 秒。
+- tossArcHeight = 105 world px。
+- contactHeight = 132 world px。
+
+SERVE_PROFILES.JUMP
+- speedFactors：SLOW 0.55、NORMAL 1、FAST 1.45。
+- arcHeight = 215 world px。
+- control = 0.76。
+- tossDuration = 1.02 秒。
+- tossArcHeight = 235 world px。
+- contactHeight = 205 world px。
+
+SERVE_TARGET_WEIGHTS
+- BACK = 80%、FRONT = 20%。
+
+SERVE_GEOMETRY_CONFIG
+- outsideBaselineDistance = 105 world px。
+- tossForwardDistance = 64 world px。
+- tossStartHeight = 62 world px。
+- targetHeight = 32.5 world px（球半徑）。
+- defaultBallRadius = 32.5、defaultAvatarRadius = 65 world px。
+- contactSamples = 12（每 fixed step 掃掠分段）。
+- anchorHorizontalScale = 0.78、anchorVerticalScale = 0.55。
+- contactDistancePadding = 16 world px。
+- jumpScreenClearance = 8 world px。
+- jumpHeightTolerance = 45 world px。
+- controlSpreadCoefficient = 1.65。
+- netTargetMargin = 1 world px。
+- arcVariance = ±24 world px。
+- jumpMotionContactFraction = 0.78。
+- jumpMotionMaximumHeight = 85 world px。
+- jumpMotionStartProgress = 0.42。
+- netFinishHorizontalRetention = 0.12。
+- netFinishVerticalRetention = 0.2。
+- netFinishMinimumDownwardSpeed = -80 world px/s。
+- 注意：contactSamples 會改變接觸精度；控制係數與 arcVariance 會改變 Seed 結果。
+
+
+四、receive-config.js
+-------------------
+
+RECEIVE_QUALITY_PARAMETERS
+- incomingDifficulty：ULTRA_FAST 35、FAST 25、MEDIUM 15、SLOW 5 分。
+- maximumPositionBonus = 10 分。
+- maximumPreparationBonus = 12 分。
+- preparationSecondsForMaximum = 0.4 秒。
+- maximumMoraleBonus = 8 分。
+- randomMinimum = -10、randomMaximum = +10 分。
+- perfectThreshold = 75、normalThreshold = 40 分。
+- 注意：正式攻擊速度名為 NORMAL；RECEIVE 內部仍以 MEDIUM 相容映射，尚未遷移 enum。
+
+RECEIVE_SUCCESS_PARAMETERS
+- 成功率錨點：(分數, 機率)
+  (-35, 0.05)、(0, 0.18)、(25, 0.42)、(50, 0.68)、(75, 0.86)、(100, 0.95)。
+- ERROR duration = 0.45～0.9 秒。
+- ERROR arcHeight = 45～150 world px。
+- ERROR distance = 180～520 world px。
+- ERROR directionSpreadRadians = π×0.78。
+- 注意：改變錨點或 ERROR 範圍會消耗相同數量但產生不同 RNG 結果。
+
+
+五、set-config.js
+---------------
+
+PASS_TRAJECTORY_CONFIG
+- PERFECT：duration 1.1 秒、arcHeight 160 world px。
+- NORMAL：duration 1.3 秒、arcHeight 210 world px。
+- BAD：duration 0.9 秒、arcHeight 120 world px。
+
+SET_TRAJECTORY_TUNING
+- durationStep = 0.1 秒。
+- maximumAdditionalDuration = 0.6 秒。
+- additionalArcHeightPerSecond = 40 world px/s。
+- successfulTouchAnimationDuration = 0.35 秒。
+- 影響：S 可達性搜尋、第二段球路及成功 SET 的動作保留時間。
+
+
+六、attack-config.js
+------------------
+
+ATTACK_SET_QUALITY_MODIFIERS
+- PERFECT：power +10、consistency +8。
+- NORMAL：0、0。
+- BAD：power -15、consistency -12。
+
+ATTACK_POWER_WEIGHT_ANCHORS
+- attack 1：SLOW 95、NORMAL 5、FAST 0。
+- attack 25：75、25、0。
+- attack 40：45、55、0。
+- attack 45：35、64、1。
+- attack 60：15、65、20。
+- attack 70：8、42、50。
+- attack 80：3、21、75。
+- attack 90：1、10、79.96675900277009。
+- attack 99：0、3、67。
+- 錨點間線性插值；ULTRA_FAST 另走二次曲線。
+
+ATTACK_SPEED_UNLOCKS
+- SLOW 1、NORMAL 1、FAST 45、ULTRA_FAST 80（原始 attack）。
+
+ATTACK_SPEED_REFERENCE
+- reference distance = 700 world px。
+- flightTimes：SLOW 1.2、NORMAL 0.9、FAST 0.65、ULTRA_FAST 0.45 秒。
+- 實際水平速度 = distance / flightTime。
+
+ATTACK_TARGET_CONFIG
+- 界內四邊形：(647,299)、(936,299)、(888,770)、(532,782)。
+- ballRadius = 32.5 world px。
+- 界外帶：球外再 8～72 world px。
+- inTargetBaseProbability = 0.60。
+- inTargetAbilitySpan = 0.36（能力 1→99）。
+- ULTRA 曲線：能力 80 起 1%，額外 29%，能力跨度 19。
+- outTargetEdgeInset = 0.08（避免落在邊段端點）。
+- 注意：目標只是初始速度反推依據，最終落點仍由物理決定。
+
+ATTACK_MOTION_PARAMETERS（暫定 V1）
+- maximumHeight = 60 world px。
+- jumpDuration = 1 秒。
+- takeoffDuration = 0.1、drawDuration = 0.2、swingDuration = 0.12 秒。
+- direction = LEFT（HOME/AWAY 執行時覆寫）。
+- maximumTakeoffDelay = 0.1 秒。
+- strikeAngleTolerance = 4 度。
+- drawAngle = 30、strikeAngle = -30、fullRotationAngle = 360 度。
+- 注意：動作時序同時限制真實第三觸球 strike window，不是純 Renderer 動畫。
+
+ATTACK_CONTACT_PARAMETERS
+- minimumBaseHeight = 140 world px。
+- heightTolerance = 20 world px。
+- horizontalTolerance = 18、verticalTolerance = 18 world px。
+- minimumOverlapDepth = 16 world px。
+- contactHeight = 180 world px。
+- 注意：READY／ATTACK 座標不在此檔；仍由 r1-attack-plan.js 定義。
+
+
+七、block-config.js
+-----------------
+
+BLOCK_PHYSICS_PARAMETERS
+- jumpDuration = 0.62 秒。
+- takeoffToContact = 0.24 秒。
+- maximumJumpHeight = 105 world px。
+- baseReachHeight = 145 world px。
+- reachTowardNet = 48 world px。
+- horizontalTolerance = 34、lateralTolerance = 48、heightTolerance = 42 world px。
+- directBlockThreshold = 0.85（正規化距離）。
+- stuffHorizontalRetention = 0.46。
+- touchHorizontalRetention = 0.38。
+- lateralRetention = 0.5。
+- reboundVerticalSpeed = 95 world px/s。
+- minimumReboundHorizontalSpeed = 180 world px/s。
+- 注意：責任名單與攔網位置不在此檔；由 Rotation／Job 定義決定。
+
+
+八、rally-config.js
+-----------------
+
+RALLY_FLOW_CONFIG
+- intermissionDuration = 0.8 秒（Rally 間隔）。
+- finishingHoldDuration = 0.35 秒。
+- finishingMaximumDuration = 3 秒。
+- maximumTeamTouches = 3 次（攔網觸球不計）。
+- 注意：尚未加入正式 RUNNING Rally 安全上限；現有 120 秒只在壓力測試工具。
+
+FORMAL_MATCH_RULES
+- setsToWin = 2 局。
+- setTargetPoints = 25、25、15 分。
+- minimumWinningMargin = 2 分。
+- maximumRallySimulationTime = 120 秒；超限時中止 Match，不偽造得分。
+- maximumMatchRallies = 1000 球；屬安全上限，不是延長賽判勝規則。
+- 注意：35～50 分隨機延長終止門檻尚未有明確正式規格，因此未實作。
+
+
+尚未遷移
+--------
+
+1. Formation V4、Rotation／Job、五種攻擊 READY／ATTACK
+   - 原因：屬定義型資料，不是一般數值參數；本階段明確禁止修改座標轉換。
+
+2. SPIKE_COURT_V1（球場 polygon、bounds、netX、netHeight）
+   - 原因：polygon、Formation 合法區與 HOME/AWAY 轉換高度耦合。
+   - netHeight=160 仍為暫定 V1；應在定義資料集中化階段一起處理。
+
+3. PASS_TARGET_ZONES_V1
+   - 原因：屬一傳區域定義，並由視覺 Editor 使用；不能只搬數值而留下第二份 Editor 預設。
+
+4. receive-animation.js 與 camera-controller.js
+   - 原因：純顯示／觀感參數；本階段不得修改 Renderer。
+
+5. 舊 match/match-resolver.js 的 TEMPORARY_SERVE_RESOLUTION
+   - 原因：首頁舊 Match 專屬，不參與 Continuous Rally；依任務要求不搬遷。
+
+6. TEAM_RECEIVE_FORMATION 的測試球員能力、morale 與 serveType 派生
+   - 原因：屬暫時測試 roster，不是比賽參數；等待正式球員輸入 Adapter。
+
+7. r1-job-coordination.js 的 legacy RIGHT_DEFENSE_POINTS 與攔網 lane offset
+   - 原因：前者是相容 fallback，正式 Rally 優先使用 Formation V4 DEFENSE；後者與工作定義及球場方向耦合。
+
+8. 單人、D2、single-defense、third-pass 等獨立實驗 defaults
+   - 原因：不屬 R1～R6 Continuous Rally 正式參數。
+
+
+修改後最低驗證
+------------
+
+1. node --check 所有 config 及修改模組。
+2. receive、serve、attack-resolution、attack-motion、block 測試。
+3. Continuous Rally／Session、R1 Attack Plan、R1～R6 rotation 測試。
+4. 1,000 Seed × 30／60／144 FPS 壓力測試。
+5. git diff --check。
+
+若固定 Seed 的事件序列改變，應回復並定位引用差異，不可用調整參數值修補測試。

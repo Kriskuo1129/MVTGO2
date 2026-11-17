@@ -55,6 +55,8 @@ import {
   PASS_TARGET_ZONES_V1,
   samplePassTarget,
 } from "./pass-target-zones.js";
+import { BALL_CONFIG } from "./config/ball-config.js";
+import { PLAYER_CONTACT_CONFIG, PLAYER_PHYSICS_CONFIG } from "./config/player-config.js";
 
 export const TEAM_RECEIVE_FORMATION = Object.freeze([
   Object.freeze({ id: "SIM-P1", position: PLAYER_POSITIONS.S, rotationPosition: "POS1", x: 1880, y: 700, receiveAbility: 60, morale: 30 }),
@@ -65,23 +67,23 @@ export const TEAM_RECEIVE_FORMATION = Object.freeze([
   Object.freeze({ id: "SIM-P6", position: PLAYER_POSITIONS.MB2, rotationPosition: "POS6", x: 1740, y: 500, receiveAbility: 55, morale: 30 }),
 ]);
 
-export const TEAM_SIMULATOR_AVATAR_SIZE = 130;
-export const TEAM_SIMULATOR_BALL_DISPLAY_SIZE = TEAM_SIMULATOR_AVATAR_SIZE / 2;
+export const TEAM_SIMULATOR_AVATAR_SIZE = PLAYER_PHYSICS_CONFIG.teamAvatarSize;
+export const TEAM_SIMULATOR_BALL_DISPLAY_SIZE = BALL_CONFIG.teamDiameter;
 export function createTeamReceiveContactGeometry(flightDuration) {
   return createReceiveContactGeometry({
     avatarWorldSize: TEAM_SIMULATOR_AVATAR_SIZE,
     avatarContactScale: getReceiveSpeedProfile(flightDuration).minimumScale,
     ballWorldSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
-    minimumOverlapDepth: 10,
-    contactTolerance: 10,
+    minimumOverlapDepth: PLAYER_CONTACT_CONFIG.receiveMinimumOverlapDepth,
+    contactTolerance: PLAYER_CONTACT_CONFIG.receiveTolerance,
   });
 }
 export const TEAM_SET_CONTACT_GEOMETRY = createSetContactGeometry({
   avatarWorldSize: TEAM_SIMULATOR_AVATAR_SIZE,
   ballWorldSize: TEAM_SIMULATOR_BALL_DISPLAY_SIZE,
   overlapRatio: SIMULATOR_BALL_OVERLAP_RATIO,
-  horizontalTolerance: 10,
-  verticalTolerance: 16,
+  horizontalTolerance: PLAYER_CONTACT_CONFIG.setHorizontalTolerance,
+  verticalTolerance: PLAYER_CONTACT_CONFIG.setVerticalTolerance,
 });
 export const TEAM_SIMULATOR_PARAMETERS = Object.freeze({
   ...DEFAULT_SIMULATOR_PARAMETERS,

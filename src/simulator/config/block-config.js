@@ -1,0 +1,16 @@
+export const BLOCK_PHYSICS_PARAMETERS = Object.freeze({
+  jumpDuration: 0.62,
+  takeoffToContact: 0.24,
+  maximumJumpHeight: 105,
+  baseReachHeight: 145,
+  reachTowardNet: 48,
+  horizontalTolerance: 34,
+  lateralTolerance: 48,
+  heightTolerance: 42,
+  directBlockThreshold: 0.85,
+  stuffHorizontalRetention: 0.46,
+  touchHorizontalRetention: 0.38,
+  lateralRetention: 0.5,
+  reboundVerticalSpeed: 95,
+  minimumReboundHorizontalSpeed: 180,
+});

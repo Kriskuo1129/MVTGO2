@@ -1,3 +1,5 @@
+import { ATTACK_SPEED_REFERENCE } from "./config/attack-config.js";
+
 export const SPIKE_SPEED_LEVELS = Object.freeze({ SLOW: "SLOW", NORMAL: "NORMAL", FAST: "FAST", ULTRA_FAST: "ULTRA_FAST" });
 export const ATTACK_SEED_MODES = Object.freeze({ AUTO: "AUTO", FIXED: "FIXED" });
 
@@ -11,10 +13,7 @@ export function createAutoAttackSeed() {
   return (time ^ entropy ^ Math.imul(autoSeedSequence, 2654435761)) >>> 0;
 }
 
-export const SPIKE_SPEED_REFERENCE = Object.freeze({
-  distance: 700,
-  flightTimes: Object.freeze({ SLOW: 1.2, NORMAL: 0.9, FAST: 0.65, ULTRA_FAST: 0.45 }),
-});
+export const SPIKE_SPEED_REFERENCE = ATTACK_SPEED_REFERENCE;
 
 export function selectWeighted(weights, random) {
   const entries = Object.entries(weights);

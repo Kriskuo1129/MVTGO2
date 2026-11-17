@@ -1,7 +1,8 @@
 import { ContinuousRallySimulator, RALLY_TEAMS } from "./continuous-rally-simulator.js";
 import { nextRallyRotation } from "./rotation-config.js";
+import { RALLY_FLOW_CONFIG } from "./config/rally-config.js";
 
-export const CONTINUOUS_RALLY_INTERMISSION = 0.8;
+export const CONTINUOUS_RALLY_INTERMISSION = RALLY_FLOW_CONFIG.intermissionDuration;
 
 export class ContinuousRallySession {
   constructor({ simulator = new ContinuousRallySimulator(), baseSeed = 1,

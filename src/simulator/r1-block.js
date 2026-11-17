@@ -1,20 +1,7 @@
 import { SIMULATOR_WORLD } from "./simulator.js";
+import { BLOCK_PHYSICS_PARAMETERS } from "./config/block-config.js";
 
-export const R1_BLOCK_PHYSICS_V1 = Object.freeze({
-  jumpDuration: 0.62,
-  takeoffToContact: 0.24,
-  maximumJumpHeight: 105,
-  baseReachHeight: 145,
-  reachTowardNet: 48,
-  horizontalTolerance: 34,
-  lateralTolerance: 48,
-  heightTolerance: 42,
-  directBlockThreshold: 0.85,
-  stuffHorizontalRetention: 0.46,
-  touchHorizontalRetention: 0.38,
-  lateralRetention: 0.5,
-  reboundVerticalSpeed: 95,
-});
+export const R1_BLOCK_PHYSICS_V1 = BLOCK_PHYSICS_PARAMETERS;
 
 export function sampleBlockJump(elapsed, config = R1_BLOCK_PHYSICS_V1) {
   const time = Math.max(0, Math.min(config.jumpDuration, elapsed));
@@ -87,7 +74,8 @@ export function createBlockRebound({ contact, incomingVelocity, attackingTeam,
   return Object.freeze({
     result: direct ? "STUFF_BLOCK" : "BLOCK_TOUCH",
     velocity: Object.freeze({
-      x: xSign * Math.max(180, Math.abs(incomingVelocity.x) * retention),
+      x: xSign * Math.max(config.minimumReboundHorizontalSpeed,
+        Math.abs(incomingVelocity.x) * retention),
       y: incomingVelocity.y * config.lateralRetention,
       height: config.reboundVerticalSpeed,
     }),

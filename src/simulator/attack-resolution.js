@@ -1,39 +1,16 @@
 import { createSeededRandom, selectWeighted, SPIKE_SPEED_LEVELS } from "./attack-quality.js";
 import { isSpikeGroundIn, SPIKE_COURT_V1 } from "./spike-court.js";
+import {
+  ATTACK_POWER_WEIGHT_ANCHORS,
+  ATTACK_SET_QUALITY_MODIFIERS,
+  ATTACK_SPEED_UNLOCKS,
+  ATTACK_TARGET_CONFIG,
+} from "./config/attack-config.js";
 
-export const SET_QUALITY_MODIFIERS = Object.freeze({
-  PERFECT: Object.freeze({ power: 10, consistency: 8 }),
-  NORMAL: Object.freeze({ power: 0, consistency: 0 }),
-  BAD: Object.freeze({ power: -15, consistency: -12 }),
-});
-
-export const ATTACK_POWER_ANCHORS = Object.freeze([
-  Object.freeze({ ability: 1, SLOW: 95, NORMAL: 5, FAST: 0 }),
-  Object.freeze({ ability: 25, SLOW: 75, NORMAL: 25, FAST: 0 }),
-  Object.freeze({ ability: 40, SLOW: 45, NORMAL: 55, FAST: 0 }),
-  Object.freeze({ ability: 45, SLOW: 35, NORMAL: 64, FAST: 1 }),
-  Object.freeze({ ability: 60, SLOW: 15, NORMAL: 65, FAST: 20 }),
-  Object.freeze({ ability: 70, SLOW: 8, NORMAL: 42, FAST: 50 }),
-  Object.freeze({ ability: 80, SLOW: 3, NORMAL: 21, FAST: 75 }),
-  Object.freeze({ ability: 90, SLOW: 1, NORMAL: 10, FAST: 79.96675900277009 }),
-  Object.freeze({ ability: 99, SLOW: 0, NORMAL: 3, FAST: 67 }),
-]);
-
-export const SPIKE_SPEED_UNLOCK_THRESHOLDS = Object.freeze({
-  SLOW: 1,
-  NORMAL: 1,
-  FAST: 45,
-  ULTRA_FAST: 80,
-});
-
-export const LEFT_LONG_TARGET_V1 = Object.freeze({
-  inBoundsPolygon: Object.freeze([
-    Object.freeze({ x: 647, y: 299 }), Object.freeze({ x: 936, y: 299 }),
-    Object.freeze({ x: 888, y: 770 }), Object.freeze({ x: 532, y: 782 }),
-  ]),
-  ballRadius: 32.5,
-  outBand: Object.freeze({ minimumBeyondBall: 8, maximumBeyondBall: 72 }),
-});
+export const SET_QUALITY_MODIFIERS = ATTACK_SET_QUALITY_MODIFIERS;
+export const ATTACK_POWER_ANCHORS = ATTACK_POWER_WEIGHT_ANCHORS;
+export const SPIKE_SPEED_UNLOCK_THRESHOLDS = ATTACK_SPEED_UNLOCKS;
+export const LEFT_LONG_TARGET_V1 = ATTACK_TARGET_CONFIG;
 
 const clampAbility = (value) => {
   if (!Number.isInteger(value) || value < 1 || value > 99) throw new RangeError("攻擊能力與攻擊穩定必須是 1～99 整數。");
@@ -53,7 +30,11 @@ export function applySetQualityModifiers(attack, attackConsistency, setQuality) 
 
 export function getUltraFastChance(attack) {
   clampAbility(attack);
-  return attack < 80 ? 0 : 1 + 29 * Math.pow((attack - 80) / 19, 2);
+  return attack < LEFT_LONG_TARGET_V1.ultraFastMinimumAbility ? 0
+    : LEFT_LONG_TARGET_V1.ultraFastBaseChance
+      + LEFT_LONG_TARGET_V1.ultraFastAdditionalChance
+        * Math.pow((attack - LEFT_LONG_TARGET_V1.ultraFastMinimumAbility)
+          / LEFT_LONG_TARGET_V1.ultraFastAbilitySpan, 2);
 }
 
 export function getAttackSpeedWeights(attack) {
@@ -93,7 +74,8 @@ export function applySpikeSpeedUnlocks(weights, attack) {
 
 export function getInTargetProbability(effectiveConsistency) {
   clampAbility(effectiveConsistency);
-  return 0.60 + 0.36 * (effectiveConsistency - 1) / 98;
+  return LEFT_LONG_TARGET_V1.inTargetBaseProbability
+    + LEFT_LONG_TARGET_V1.inTargetAbilitySpan * (effectiveConsistency - 1) / 98;
 }
 
 const triangleArea = (a, b, c) => Math.abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2;
@@ -123,7 +105,8 @@ export function sampleNaturalOutTarget(random, court = SPIKE_COURT_V1,
   });
   let cursor = random() * edges.reduce((sum, edge) => sum + edge.length, 0);
   const edge = edges.find((candidate) => (cursor -= candidate.length) <= 0) ?? edges.at(-1);
-  const t = 0.08 + random() * 0.84;
+  const t = configuration.outTargetEdgeInset
+    + random() * (1 - configuration.outTargetEdgeInset * 2);
   const base = { x: edge.a.x + (edge.b.x - edge.a.x) * t, y: edge.a.y + (edge.b.y - edge.a.y) * t };
   const dx = edge.b.x - edge.a.x, dy = edge.b.y - edge.a.y, length = Math.hypot(dx, dy);
   const minimumOffset = configuration.ballRadius + configuration.outBand.minimumBeyondBall;

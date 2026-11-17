@@ -1,4 +1,6 @@
 import { RECEIVE_SPEED_LEVELS } from "./receive-animation.js";
+import { RECEIVE_QUALITY_PARAMETERS, RECEIVE_SUCCESS_PARAMETERS } from "./config/receive-config.js";
+import { PASS_TRAJECTORY_CONFIG, SET_TRAJECTORY_TUNING } from "./config/set-config.js";
 
 export const RECEIVE_QUALITIES = Object.freeze({
   PERFECT: "PERFECT",
@@ -12,44 +14,11 @@ export const RECEIVE_RESULTS = Object.freeze({
   SUCCESS: "SUCCESS",
 });
 
-export const RECEIVE_QUALITY_CONFIG = Object.freeze({
-  incomingDifficulty: Object.freeze({
-    [RECEIVE_SPEED_LEVELS.ULTRA_FAST]: 35,
-    [RECEIVE_SPEED_LEVELS.FAST]: 25,
-    [RECEIVE_SPEED_LEVELS.MEDIUM]: 15,
-    [RECEIVE_SPEED_LEVELS.SLOW]: 5,
-  }),
-  maximumPositionBonus: 10,
-  maximumPreparationBonus: 12,
-  preparationSecondsForMaximum: 0.4,
-  maximumMoraleBonus: 8,
-  randomMinimum: -10,
-  randomMaximum: 10,
-  perfectThreshold: 75,
-  normalThreshold: 40,
-});
+export const RECEIVE_QUALITY_CONFIG = RECEIVE_QUALITY_PARAMETERS;
 
 // V1 暫定成功率：與品質分數共用能力、來球難度及正向加成，但不加入隨機發揮。
 // 錨點之間採線性插值，避免把成功率數值散落在發球與扣球流程。
-export const RECEIVE_SUCCESS_CONFIG = Object.freeze({
-  scoreAnchors: Object.freeze([
-    Object.freeze({ score: -35, probability: 0.05 }),
-    Object.freeze({ score: 0, probability: 0.18 }),
-    Object.freeze({ score: 25, probability: 0.42 }),
-    Object.freeze({ score: 50, probability: 0.68 }),
-    Object.freeze({ score: 75, probability: 0.86 }),
-    Object.freeze({ score: 100, probability: 0.95 }),
-  ]),
-  errorFlight: Object.freeze({
-    minimumDuration: 0.45,
-    maximumDuration: 0.9,
-    minimumArcHeight: 45,
-    maximumArcHeight: 150,
-    minimumDistance: 180,
-    maximumDistance: 520,
-    directionSpreadRadians: Math.PI * 0.78,
-  }),
-});
+export const RECEIVE_SUCCESS_CONFIG = RECEIVE_SUCCESS_PARAMETERS;
 
 export const INCOMING_QUALITY_LABELS = Object.freeze({
   [RECEIVE_SPEED_LEVELS.ULTRA_FAST]: "高品質",
@@ -236,14 +205,5 @@ export function resolveReceiveQuality({
   });
 }
 
-export const SECOND_PASS_TRAJECTORY_CONFIG = Object.freeze({
-  [RECEIVE_QUALITIES.PERFECT]: Object.freeze({ duration: 1.1, arcHeight: 160 }),
-  [RECEIVE_QUALITIES.NORMAL]: Object.freeze({ duration: 1.3, arcHeight: 210 }),
-  [RECEIVE_QUALITIES.BAD]: Object.freeze({ duration: 0.9, arcHeight: 120 }),
-});
-
-export const SECOND_TOUCH_TRAJECTORY_TUNING = Object.freeze({
-  durationStep: 0.1,
-  maximumAdditionalDuration: 0.6,
-  additionalArcHeightPerSecond: 40,
-});
+export const SECOND_PASS_TRAJECTORY_CONFIG = PASS_TRAJECTORY_CONFIG;
+export const SECOND_TOUCH_TRAJECTORY_TUNING = SET_TRAJECTORY_TUNING;

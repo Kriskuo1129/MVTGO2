@@ -1,17 +1,9 @@
 import { createSimulatorBall, launchSimulatorBall } from "./ball.js";
 import { isSpikeGroundIn, SPIKE_COURT_V1 } from "./spike-court.js";
 import { getSpikeReferenceSpeed } from "./attack-quality.js";
+import { NATURAL_BALL_PHYSICS } from "./config/ball-config.js";
 
-export const NATURAL_SPIKE_PHYSICS_V1 = Object.freeze({
-  gravity: 980,
-  verticalRestitution: 0.48,
-  horizontalBounceRetention: 0.72,
-  horizontalDampingPerSecond: 1.8,
-  minimumBounceSpeed: 70,
-  restHorizontalSpeed: 18,
-  netHorizontalRetention: 0.15,
-  netDownwardSpeed: 120,
-});
+export const NATURAL_SPIKE_PHYSICS_V1 = NATURAL_BALL_PHYSICS;
 
 export function createTargetedNaturalSpikeLaunch({ start, target, speedLevel,
   radius, physics = NATURAL_SPIKE_PHYSICS_V1 }) {

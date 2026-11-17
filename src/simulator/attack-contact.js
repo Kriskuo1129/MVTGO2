@@ -1,11 +1,7 @@
+import { ATTACK_CONTACT_PARAMETERS } from "./config/attack-config.js";
+
 // ATTACK 專屬幾何；世界像素。下降段高點接觸，不共用 RECEIVE／SET 判定。
-export const ATTACK_CONTACT_CONFIG = Object.freeze({
-  minimumBaseHeight: 140,
-  heightTolerance: 20,
-  horizontalTolerance: 18,
-  verticalTolerance: 18,
-  minimumOverlapDepth: 16,
-});
+export const ATTACK_CONTACT_CONFIG = ATTACK_CONTACT_PARAMETERS;
 
 export function createAttackContactGeometry({ avatarWorldSize, ballWorldSize, contactHeight, direction = "LEFT" }) {
   const config = ATTACK_CONTACT_CONFIG;

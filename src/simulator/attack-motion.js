@@ -1,14 +1,7 @@
+import { ATTACK_MOTION_PARAMETERS } from "./config/attack-config.js";
+
 // V1 實驗參數，尚未正式定案。時間：秒；高度：世界像素；角度：度。
-export const ATTACK_MOTION_V1 = Object.freeze({
-  maximumHeight: 60,
-  jumpDuration: 1,
-  takeoffDuration: 0.1,
-  drawDuration: 0.2,
-  swingDuration: 0.12,
-  direction: "LEFT",
-  maximumTakeoffDelay: 0.1,
-  strikeAngleTolerance: 4,
-});
+export const ATTACK_MOTION_V1 = ATTACK_MOTION_PARAMETERS;
 
 export function validateAttackMotionParameters(input = {}) {
   const p = { ...ATTACK_MOTION_V1, ...input };
@@ -35,11 +28,14 @@ export function sampleAttackMotion(parameters, elapsed) {
   const strike = strikeElapsed(parameters);
   const sign = parameters.direction === "LEFT" ? 1 : -1;
   let jumpPhase, angle;
-  if (t >= parameters.jumpDuration) { jumpPhase = "LANDED"; angle = -360; }
+  if (t >= parameters.jumpDuration) { jumpPhase = "LANDED"; angle = -parameters.fullRotationAngle; }
   else if (t < drawStart) { jumpPhase = "TAKEOFF"; angle = 0; }
-  else if (t < swingStart) { jumpPhase = "DRAW"; angle = 30 * (t - drawStart) / parameters.drawDuration; }
-  else if (t <= strike) { jumpPhase = "SWING"; angle = 30 - 60 * (t - swingStart) / parameters.swingDuration; }
-  else { jumpPhase = "FOLLOW_THROUGH"; angle = -30 - 330 * (t - strike) / (parameters.jumpDuration - strike); }
+  else if (t < swingStart) { jumpPhase = "DRAW"; angle = parameters.drawAngle * (t - drawStart) / parameters.drawDuration; }
+  else if (t <= strike) { jumpPhase = "SWING"; angle = parameters.drawAngle
+    + (parameters.strikeAngle - parameters.drawAngle) * (t - swingStart) / parameters.swingDuration; }
+  else { jumpPhase = "FOLLOW_THROUGH"; angle = parameters.strikeAngle
+    + (-parameters.fullRotationAngle - parameters.strikeAngle)
+      * (t - strike) / (parameters.jumpDuration - strike); }
   // 在預定揮擊末端達到最高點；兩段曲線在最高點具有相同的零斜率。
   const jumpHeight = jumpPhase === "LANDED" ? 0 : parameters.maximumHeight * (t <= strike
     ? Math.sin(Math.PI / 2 * t / strike)
@@ -69,7 +65,9 @@ export function updateAttackMotion(motion, player, simulationTime) {
 export function getAttackStrikeWindow(motion, fromTime, toTime) {
   if (!motion || motion.startedAt === null || toTime <= fromTime) return null;
   const end = motion.startedAt + strikeElapsed(motion.parameters);
-  const begin = end - motion.parameters.swingDuration * motion.parameters.strikeAngleTolerance / 60;
+  const swingAngleRange = motion.parameters.drawAngle - motion.parameters.strikeAngle;
+  const begin = end - motion.parameters.swingDuration
+    * motion.parameters.strikeAngleTolerance / swingAngleRange;
   const min = Math.max(0, (begin - fromTime) / (toTime - fromTime));
   const max = Math.min(1, (end - fromTime) / (toTime - fromTime));
   return min <= max ? { min, max } : null;
