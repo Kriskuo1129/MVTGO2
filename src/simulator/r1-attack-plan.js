@@ -1,6 +1,7 @@
 import { ATTACK_TYPES, DEFAULT_ATTACK_POSITIONS } from "./attack-positions.js";
 import { ATTACK_MOTION_V1, strikeElapsed } from "./attack-motion.js";
 import { SIMULATOR_WORLD } from "./simulator.js";
+import { getRotationConfig } from "./rotation-config.js";
 
 export const R1_ATTACK_PLAN_VERSION = "R1_ATTACK_PLAN_V1";
 export const R1_ATTACK_PHASES = Object.freeze({
@@ -32,33 +33,28 @@ const AWAY_ATTACK_CONFIG_BY_TYPE = Object.freeze({
     readyPosition: Object.freeze({ x: 1810, y: 455 }),
     attackPosition: Object.freeze({ x: 1540, y: 455 }),
     setDuration: 1.35, setArcHeight: 300, source: "R1_B_TEMPORARY" }),
+  [ATTACK_TYPES.BACK_RIGHT_LONG]: Object.freeze({ attackType: ATTACK_TYPES.BACK_RIGHT_LONG,
+    attackRole: "BACK_RIGHT_LONG", workType: "PREPARE_BACK_RIGHT_ATTACK",
+    readyPosition: Object.freeze({ x: 1810, y: 240 }),
+    attackPosition: Object.freeze({ x: 1540, y: 240 }),
+    setDuration: 1.35, setArcHeight: 300, source: "ROTATION_V1_TEMPORARY" }),
 });
 
-const ATTACK_TYPE_BY_PHASE_AND_JOB = Object.freeze({
-  [R1_ATTACK_PHASES.SERVE_RECEIVE]: Object.freeze({
-    OH1: ATTACK_TYPES.RIGHT_LONG,
-    OP: ATTACK_TYPES.LEFT_LONG,
-    MB1: ATTACK_TYPES.MIDDLE_QUICK,
-    OH2: ATTACK_TYPES.BACK_CENTER_LONG,
-  }),
-  [R1_ATTACK_PHASES.COUNTERATTACK]: Object.freeze({
-    OH1: ATTACK_TYPES.RIGHT_LONG,
-    OP: ATTACK_TYPES.LEFT_LONG,
-    MB1: ATTACK_TYPES.MIDDLE_QUICK,
-    OH2: ATTACK_TYPES.BACK_CENTER_LONG,
-  }),
-});
+const ATTACK_CANDIDATE_JOB_ORDER = Object.freeze(["OH1", "OP", "MB1", "OH2", "MB2"]);
 
 const transformAttackPoint = (point, team) => team === "AWAY" ? point : Object.freeze({
   x: SIMULATOR_WORLD.width - point.x,
   y: SIMULATOR_WORLD.height - point.y,
 });
 
-export function getR1AttackConfigurations(team, attackPhase = R1_ATTACK_PHASES.SERVE_RECEIVE) {
+export function getR1AttackConfigurations(team, attackPhase = R1_ATTACK_PHASES.SERVE_RECEIVE,
+  rotation = "R1") {
   if (!["HOME", "AWAY"].includes(team)) throw new RangeError("R1 攻擊配置需要 HOME 或 AWAY。");
   if (!Object.values(R1_ATTACK_PHASES).includes(attackPhase)) throw new RangeError("R1 攻擊階段不合法。");
-  const assignments = ATTACK_TYPE_BY_PHASE_AND_JOB[attackPhase];
-  return Object.freeze(Object.fromEntries(Object.entries(assignments).map(([job, attackType]) => {
+  const assignments = getRotationConfig(rotation).attacks;
+  return Object.freeze(Object.fromEntries(ATTACK_CANDIDATE_JOB_ORDER
+    .filter((job) => assignments[job]).map((job) => {
+    const attackType = assignments[job];
     const entry = AWAY_ATTACK_CONFIG_BY_TYPE[attackType];
     return [job,
     Object.freeze({ ...entry,
@@ -70,20 +66,23 @@ export function getR1AttackConfigurations(team, attackPhase = R1_ATTACK_PHASES.S
 }
 
 export function createR1AttackPlan({ team, revision, firstTouchPlayerId, firstTouchJob,
-  attackPhase = R1_ATTACK_PHASES.SERVE_RECEIVE }) {
-  const configurations = getR1AttackConfigurations(team, attackPhase);
+  attackPhase = R1_ATTACK_PHASES.SERVE_RECEIVE, rotation = "R1" }) {
+  const rotationConfig = getRotationConfig(rotation);
+  const configurations = getR1AttackConfigurations(team, attackPhase, rotation);
   const alternateSet = firstTouchJob === "S";
-  const candidateJobs = alternateSet ? ["OH1"] : ["OH1", "OP", "MB1", "OH2"];
+  const candidateJobs = alternateSet ? [rotationConfig.alternateSet.targetJob]
+    : ATTACK_CANDIDATE_JOB_ORDER.filter((job) => rotationConfig.attacks[job]);
   return {
-    id: `${team}-R1-ATTACK-${revision}`,
+    id: `${team}-${rotation}-ATTACK-${revision}`,
     version: R1_ATTACK_PLAN_VERSION,
     revision,
+    rotation,
     team,
     attackPhase,
     firstTouchPlayerId,
     firstTouchJob,
-    setterJob: alternateSet ? "OP" : "S",
-    forcedCandidateJob: alternateSet ? "OH1" : null,
+    setterJob: alternateSet ? rotationConfig.alternateSet.setterJob : "S",
+    forcedCandidateJob: alternateSet ? rotationConfig.alternateSet.targetJob : null,
     status: "PREPARING",
     selectedJob: null,
     selectedPlayerId: null,

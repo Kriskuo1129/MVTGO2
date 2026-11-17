@@ -18,8 +18,10 @@ import { TEAM_RECEIVE_FORMATION, TEAM_SET_CONTACT_GEOMETRY, TEAM_SIMULATOR_AVATA
   TEAM_SIMULATOR_BALL_DISPLAY_SIZE, TEAM_SIMULATOR_PARAMETERS } from "./team-simulator.js";
 import { assignPrimaryReceiver } from "./team-coordination.js";
 import { ATTACK_MOVEMENT_PHASES, stepAttackAssignment } from "./attack-assignment.js";
-import { DEFAULT_CONTINUOUS_FORMATION, resolveContinuousRallyFormation,
-  resolveContinuousFormationProfile, validateContinuousFormation } from "./continuous-rally-formation.js";
+import { createContinuousFormationLibrary, DEFAULT_CONTINUOUS_FORMATION_LIBRARY,
+  getContinuousRotationFormation,
+  resolveContinuousRallyFormation, resolveContinuousFormationProfile,
+  validateContinuousFormation, validateContinuousFormationLibrary } from "./continuous-rally-formation.js";
 import { createServeToss, detectServeContact, detectServeNetContact, getServePosition,
   normalizeServeType, resolveServeLaunch, SERVE_PHASE_TIMING, SIMULATOR_SERVE_TYPES } from "./serve-system.js";
 import { createR1AttackPreparationPlan, createR1FormationStandbyPlan,
@@ -29,6 +31,7 @@ import { createR1AttackPlan, getR1AttackConfigurations,
   R1_ATTACK_PHASES, selectR1AttackCandidate } from "./r1-attack-plan.js";
 import { createBlockRebound, detectSweptBlockContact,
   R1_BLOCK_PHYSICS_V1, sampleBlockJump } from "./r1-block.js";
+import { getRotationConfig } from "./rotation-config.js";
 
 export const RALLY_TEAMS = Object.freeze({ HOME: "HOME", AWAY: "AWAY" });
 export const RALLY_PHASES = Object.freeze({ SERVE: "SERVE", RECEIVE: "RECEIVE", SET: "SET",
@@ -67,28 +70,57 @@ function createTeam(team, parameters, formation) {
 
 export class ContinuousRallySimulator {
   constructor({ parameters = TEAM_SIMULATOR_PARAMETERS, fixedStep = SIMULATOR_FIXED_STEP,
-    seed = 2, initialFormation = DEFAULT_CONTINUOUS_FORMATION,
+    seed = 2, initialFormation = null, formationLibrary = DEFAULT_CONTINUOUS_FORMATION_LIBRARY,
+    rotations = { HOME: "R1", AWAY: "R1" },
     servingTeam = RALLY_TEAMS.HOME, serverPlayerId = null, serveMode = "FORMAL" } = {}) {
     this.fixedStep = fixedStep;
     this.seed = seed >>> 0;
     this.parameters = validateSimulatorParameters(parameters);
-    this.initialFormation = validateContinuousFormation(initialFormation);
+    this.formationLibrary = initialFormation
+      ? createContinuousFormationLibrary(validateContinuousFormation(initialFormation))
+      : validateContinuousFormationLibrary(formationLibrary);
+    this.teamRotations = this.validateRotations(rotations);
+    this.initialFormation = getContinuousRotationFormation(this.formationLibrary, "R1");
     this.serveConfiguration = { servingTeam, serverPlayerId, serveMode };
     this.reset();
   }
 
   configure(parameters) { this.parameters = validateSimulatorParameters({ ...this.parameters, ...parameters }); this.reset(); }
-  configureFormation(formation) { this.initialFormation = validateContinuousFormation(formation); this.reset(); }
+  validateRotations(rotations) {
+    const result = {};
+    for (const team of Object.values(RALLY_TEAMS)) {
+      result[team] = getRotationConfig(rotations?.[team] ?? "R1").rotation;
+    }
+    return Object.freeze(result);
+  }
+  rotation(team) { return this.teamRotations[team]; }
+  configureFormation(formation) {
+    this.formationLibrary = createContinuousFormationLibrary(validateContinuousFormation(formation));
+    this.initialFormation = getContinuousRotationFormation(this.formationLibrary, "R1");
+    this.reset();
+  }
+  configureFormationLibrary(library) {
+    this.formationLibrary = validateContinuousFormationLibrary(library);
+    this.initialFormation = getContinuousRotationFormation(this.formationLibrary, "R1");
+    this.reset();
+  }
+  configureRotations(rotations) { this.teamRotations = this.validateRotations(rotations); this.reset(); }
   reset() {
     this.accumulator = 0; this.simulationTime = 0; this.status = "READY";
     this.ballFlightId = 0;
     this.rallyPhase = RALLY_PHASES.SERVE; this.events = []; this.rallyResult = null;
     this.ball = createSimulatorBall({ x: 250, y: 450, height: 72 });
-    const rallyFormation = resolveContinuousRallyFormation(this.initialFormation,
-      this.serveConfiguration.servingTeam);
+    const rotationFormations = Object.fromEntries(Object.values(RALLY_TEAMS).map((team) =>
+      [team, getContinuousRotationFormation(this.formationLibrary, this.rotation(team))]));
+    const rallyFormation = Object.freeze({ teams: Object.freeze(Object.fromEntries(
+      Object.values(RALLY_TEAMS).map((team) => [team,
+        resolveContinuousRallyFormation(rotationFormations[team],
+          this.serveConfiguration.servingTeam).teams[team]]))) });
     this.rallyFormation = rallyFormation;
-    this.rallyReceiveFormation = resolveContinuousFormationProfile(this.initialFormation, "RECEIVE");
-    this.rallyDefenseFormation = resolveContinuousFormationProfile(this.initialFormation, "DEFENSE");
+    this.rallyReceiveFormation = Object.freeze(Object.fromEntries(Object.values(RALLY_TEAMS).map((team) =>
+      [team, resolveContinuousFormationProfile(rotationFormations[team], "RECEIVE")[team]])));
+    this.rallyDefenseFormation = Object.freeze(Object.fromEntries(Object.values(RALLY_TEAMS).map((team) =>
+      [team, resolveContinuousFormationProfile(rotationFormations[team], "DEFENSE")[team]])));
     this.players = [...createTeam(RALLY_TEAMS.HOME, this.parameters, rallyFormation),
       ...createTeam(RALLY_TEAMS.AWAY, this.parameters, rallyFormation)];
     this.activeTeam = RALLY_TEAMS.AWAY; this.lastTouchTeam = RALLY_TEAMS.HOME;
@@ -133,16 +165,19 @@ export class ContinuousRallySimulator {
     const servingTeam = this.serveConfiguration.servingTeam;
     const candidates = this.teamPlayers(servingTeam);
     const requestedServer = candidates.find((player) => player.id === this.serveConfiguration.serverPlayerId);
-    if (requestedServer && requestedServer.job !== "S") throw new Error("R1 發球員必須使用 S Job。");
-    const server = requestedServer ?? candidates.find((player) => player.job === "S");
-    if (!server) throw new Error(`${servingTeam} 找不到 R1 S 發球員。`);
+    const serverJob = getRotationConfig(this.rotation(servingTeam)).serverJob;
+    if (requestedServer && requestedServer.job !== serverJob) {
+      throw new Error(`${this.rotation(servingTeam)} 發球員必須使用 ${serverJob} Job。`);
+    }
+    const server = requestedServer ?? candidates.find((player) => player.job === serverJob);
+    if (!server) throw new Error(`${servingTeam} 找不到 ${this.rotation(servingTeam)} ${serverJob} 發球員。`);
     if (this.serveConfiguration.ability != null) server.serveAbility = this.serveConfiguration.ability;
     if (this.serveConfiguration.serveType != null) server.serveType = normalizeServeType(this.serveConfiguration.serveType);
     else server.serveType = normalizeServeType(server.serveType);
     this.manualServeTarget = target;
     this.serverPlayerId = server.id; this.activeTeam = opposite(servingTeam);
     this.lastTouchTeam = servingTeam;
-    this.applyR1WorkPlan(createR1ServePlan(servingTeam, server.job));
+    this.applyR1WorkPlan(createR1ServePlan(servingTeam, server.job, this.rotation(servingTeam)));
     const position = getServePosition(servingTeam, target?.y ?? 450);
     Object.assign(server, { x: position.x, y: position.y, targetX: position.x, targetY: position.y,
       action: "SERVE_PREPARE", isMoving: false });
@@ -178,7 +213,7 @@ export class ContinuousRallySimulator {
   applyR1FormationStandby(team, profile, reason) {
     const positions = profile === "DEFENSE" ? this.defenseFormation(team) : this.receiveFormation(team);
     return this.applyR1WorkPlan(createR1FormationStandbyPlan(team,
-      positions, profile, reason));
+      positions, profile, reason, this.rotation(team)));
   }
 
   isProtectedR1Actor(player) {
@@ -206,7 +241,8 @@ export class ContinuousRallySimulator {
       }
     }
     this.events.push(Object.freeze({ type: "R1_WORK_PLAN_ASSIGNED", time: this.simulationTime,
-      team: plan.team, phase: plan.phase, reason: plan.reason, revision: this.workPlanRevision }));
+      team: plan.team, rotation: plan.rotation ?? this.rotation(plan.team),
+      phase: plan.phase, reason: plan.reason, revision: this.workPlanRevision }));
     return this.teamWorkPlans[plan.team];
   }
 
@@ -235,7 +271,8 @@ export class ContinuousRallySimulator {
     this.applyR1FormationStandby(team, incomingKind === "ATTACK" ? "DEFENSE" : "RECEIVE",
       incomingKind === "ATTACK" ? "OPPONENT_ATTACK_IN_PLAY" : "OPPONENT_SERVE_IN_PLAY");
     const candidates = this.teamPlayers(team).filter((player) => incomingKind === "ATTACK"
-      ? isR1DefenseReceiveJob(player.job) : isR1ReceiveJob(player.job));
+      ? isR1DefenseReceiveJob(player.job, this.rotation(team))
+        : isR1ReceiveJob(player.job, this.rotation(team)));
     const assignment = assignPrimaryReceiver({ ball: this.ball, players: candidates,
       contactRange: this.parameters.contactRange, contactAnchorDistance: SIMULATOR_CONTACT_ANCHOR_DISTANCE,
       maximumContactHeight: SIMULATOR_MAXIMUM_CONTACT_HEIGHT, sampleStep: 1 / 60,
@@ -424,7 +461,8 @@ export class ContinuousRallySimulator {
   }
 
   prepareSet(team, firstTouchPlayer = null) {
-    const setterJob = firstTouchPlayer?.job === "S" ? "OP" : "S";
+    const setterJob = firstTouchPlayer?.job === "S"
+      ? getRotationConfig(this.rotation(team)).alternateSet.setterJob : "S";
     const setter = this.teamPlayers(team).find((player) => player.job === setterJob);
     if (!setter) throw new Error(`${team} 缺少 R1 第二觸球 Job：${setterJob}`);
     this.secondTouchPlayerId = setter.id; setter.touchEligible = true; setter.action = "CHASE";
@@ -522,19 +560,21 @@ export class ContinuousRallySimulator {
     this.attackPlanRevision += 1;
     const attackPhase = this.receiveIncomingKind === "SERVE"
       ? R1_ATTACK_PHASES.SERVE_RECEIVE : R1_ATTACK_PHASES.COUNTERATTACK;
+    const rotation = this.rotation(team);
     this.attackPlan = createR1AttackPlan({ team, revision: this.attackPlanRevision,
       firstTouchPlayerId: firstTouchPlayer.id, firstTouchJob: firstTouchPlayer.job,
-      attackPhase });
-    const configurations = getR1AttackConfigurations(team, attackPhase);
+      attackPhase, rotation });
+    const configurations = getR1AttackConfigurations(team, attackPhase, rotation);
     this.applyR1WorkPlan(createR1AttackPreparationPlan(team, {
       firstTouchJob: firstTouchPlayer.job,
       attackConfigurations: configurations,
+      rotation,
     }));
     this.attackPlayerId = null;
     this.attackAssignment = null;
     this.attackCandidateEvaluations = null;
     this.events.push(Object.freeze({ type: "ATTACK_PLAN_CREATED", time: this.simulationTime,
-      team, attackPlanId: this.attackPlan.id, setterJob: this.attackPlan.setterJob,
+      team, rotation, attackPlanId: this.attackPlan.id, setterJob: this.attackPlan.setterJob,
       attackPhase,
       candidateJobs: Object.freeze(this.attackPlan.candidates.map((entry) => entry.job)),
       candidates: Object.freeze(this.attackPlan.candidates.map((entry) => Object.freeze({
@@ -578,12 +618,13 @@ export class ContinuousRallySimulator {
   }
 
   prepareBlock(defendingTeam, attackType, laneY, attackingTeam) {
+    const rotation = this.rotation(defendingTeam);
     const plan = createR1BlockPlan(defendingTeam, attackType, laneY,
-      this.defenseFormation(defendingTeam));
+      this.defenseFormation(defendingTeam), rotation);
     this.applyR1WorkPlan(plan);
-    const jobs = getR1BlockJobs(attackType);
+    const jobs = getR1BlockJobs(attackType, rotation);
     this.blockState = {
-      attackingTeam, defendingTeam, attackType, assignedAt: this.simulationTime,
+      attackingTeam, defendingTeam, rotation, attackType, assignedAt: this.simulationTime,
       status: "ASSIGNED", contact: null, result: null, missLogged: false,
       assignments: jobs.map((job) => {
         const player = this.teamPlayers(defendingTeam).find((candidate) => candidate.job === job);
@@ -593,7 +634,7 @@ export class ContinuousRallySimulator {
       }),
     };
     this.events.push(Object.freeze({ type: "BLOCK_ASSIGN", time: this.simulationTime,
-      team: defendingTeam, attackType, jobs: Object.freeze([...jobs]) }));
+      team: defendingTeam, rotation, attackType, jobs: Object.freeze([...jobs]) }));
   }
 
   updateBlockReadiness() {
@@ -989,7 +1030,7 @@ export class ContinuousRallySimulator {
         attackPlayer.y - this.attackAssignment.attackPosition.y),
     }) : null;
     return Object.freeze({ status: this.status, rallyPhase: this.rallyPhase, activeTeam: this.activeTeam,
-      seed: this.seed,
+      seed: this.seed, rotations: this.teamRotations,
       ballFlightId: this.ballFlightId,
       simulationTime: this.simulationTime, parameters: this.parameters, world: SIMULATOR_WORLD,
       primaryReceiverId: this.primaryReceiverId, secondTouchPlayerId: this.secondTouchPlayerId,

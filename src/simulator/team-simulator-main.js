@@ -18,8 +18,8 @@ import { ATTACK_SEED_MODES } from "./attack-quality.js";
 import { getHighestUnlockedSpikeSpeed } from "./attack-resolution.js";
 import { ContinuousFormationEditor } from "./continuous-formation-editor.js";
 import { ContinuousRallySession } from "./continuous-rally-session.js";
-import { getAppearancePlayerIds, getContinuousRotationFormation,
-  loadContinuousFormationLibrary, saveContinuousFormationLibrary } from "./continuous-rally-formation.js";
+import { getAppearancePlayerIds, loadContinuousFormationLibrary,
+  saveContinuousFormationLibrary } from "./continuous-rally-formation.js";
 import { formatRallyEventLog, RallyEventLogStore } from "./rally-event-log.js";
 
 const PARAMETER_FIELDS = Object.freeze({
@@ -120,8 +120,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
   organizeTeamSimulatorLayout(root);
   const simulator = new SpikeReceiveSimulator();
   let continuousFormationLibrary = loadContinuousFormationLibrary();
-  let continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
-  const continuousSimulator = new ContinuousRallySimulator({ initialFormation: continuousFormation });
+  const continuousSimulator = new ContinuousRallySimulator({ formationLibrary: continuousFormationLibrary });
   const continuousSession = new ContinuousRallySession({ simulator: continuousSimulator, baseSeed: 20261112 });
   const continuousRallyEnabled = root.querySelector("#continuous-rally-enabled");
   const continuousServingTeam = root.querySelector("#continuous-serving-team");
@@ -350,18 +349,15 @@ export function createTeamSimulatorApp({ root, onExit }) {
     formation: continuousFormationLibrary,
     onChange(library) {
       continuousFormationLibrary = library;
-      continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
-      continuousSimulator.configureFormation(continuousFormation);
+      continuousSimulator.configureFormationLibrary(continuousFormationLibrary);
       renderer.renderWhenReady(continuousSimulator.getSnapshot());
     },
     onSave(library) {
       continuousFormationLibrary = saveContinuousFormationLibrary(library);
-      continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
       return continuousFormationLibrary;
     },
     onReload() {
       continuousFormationLibrary = loadContinuousFormationLibrary();
-      continuousFormation = getContinuousRotationFormation(continuousFormationLibrary, "R1");
       return continuousFormationLibrary;
     },
   });
@@ -606,7 +602,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
     continuousSession.stop();
     renderer.stop();
     continuousRallyEnabled.checked = true;
-    continuousSimulator.configureFormation(continuousFormation);
+    continuousSimulator.configureFormationLibrary(continuousFormationLibrary);
     renderer.setInteractionEnabled(false);
     formationEditor.setActive(true);
     formationEditButton.setAttribute("aria-pressed", "true");
@@ -638,7 +634,7 @@ export function createTeamSimulatorApp({ root, onExit }) {
     continuousSession.baseSeed = Number(continuousRallySeed.value) >>> 0;
     rallyLogStore.beginSession();
     continuousSimulator.configure(readParameters());
-    continuousSimulator.configureFormation(continuousFormation);
+    continuousSimulator.configureFormationLibrary(continuousFormationLibrary);
     continuousSession.start({ firstServingTeam: continuousServingTeam.value,
       serveType: continuousServeType.value, serveAbility: Number(continuousServeAbility.value) });
     attackMessage.textContent = "連續 Rally 測試進行中；每球完整收尾後自動計分並由得分方發下一球。";

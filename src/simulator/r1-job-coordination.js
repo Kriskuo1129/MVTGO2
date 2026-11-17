@@ -1,4 +1,5 @@
 import { SIMULATOR_WORLD } from "./simulator.js";
+import { getRotationConfig } from "./rotation-config.js";
 
 export const R1_JOBS = Object.freeze(["S", "OH1", "OH2", "MB1", "MB2", "OP"]);
 
@@ -12,6 +13,7 @@ export const R1_WORK_TYPES = Object.freeze({
   PREPARE_MIDDLE_QUICK: "PREPARE_MIDDLE_QUICK",
   PREPARE_LONG: "PREPARE_LONG",
   PREPARE_RIGHT_LONG: "PREPARE_RIGHT_LONG",
+  PREPARE_BACK_RIGHT_ATTACK: "PREPARE_BACK_RIGHT_ATTACK",
   HOLD: "HOLD",
   BLOCK_BACK_LONG: "BLOCK_BACK_LONG",
   BLOCK_ALL: "BLOCK_ALL",
@@ -55,23 +57,25 @@ function freezePlan(team, phase, reason, assignments) {
     assignments: Object.freeze(assignments.map((entry) => Object.freeze(entry))) });
 }
 
-export function isR1ReceiveJob(job) {
-  return R1_RECEIVE_JOBS.includes(job);
+export function isR1ReceiveJob(job, rotation = "R1") {
+  return getRotationConfig(rotation).serveReceive.includes(job);
 }
 
-export function isR1DefenseReceiveJob(job) {
-  return R1_DEFENSE_RECEIVE_JOBS.includes(job);
+export function isR1DefenseReceiveJob(job, rotation = "R1") {
+  return getRotationConfig(rotation).defenseReceive.includes(job);
 }
 
-export function createR1ServePlan(team, serverJob = "S") {
-  if (serverJob !== "S") throw new Error("R1 發球員必須為 S。");
-  return freezePlan(team, "SERVE_INITIAL", "R1_SERVE_PREPARE", R1_JOBS.map((job) => ({
+export function createR1ServePlan(team, serverJob = "S", rotation = "R1") {
+  if (serverJob !== getRotationConfig(rotation).serverJob) {
+    throw new Error(`${rotation} 發球員必須為 ${getRotationConfig(rotation).serverJob}。`);
+  }
+  return Object.freeze({ ...freezePlan(team, "SERVE_INITIAL", `${rotation}_SERVE_PREPARE`, R1_JOBS.map((job) => ({
     job,
-    workType: job === "S" ? R1_WORK_TYPES.SERVE : R1_WORK_TYPES.HOLD,
+    workType: job === serverJob ? R1_WORK_TYPES.SERVE : R1_WORK_TYPES.HOLD,
     implementationStatus: "IMPLEMENTED",
     target: null,
     moveEnabled: false,
-  })));
+  }))), rotation });
 }
 
 export function createR1ReceivePlan(team, incomingKind = "SERVE") {
@@ -89,7 +93,7 @@ export function createR1ReceivePlan(team, incomingKind = "SERVE") {
   })));
 }
 
-export function createR1FormationStandbyPlan(team, positions, profile, reason) {
+export function createR1FormationStandbyPlan(team, positions, profile, reason, rotation = "R1") {
   if (!Array.isArray(positions) || positions.length !== R1_JOBS.length) {
     throw new TypeError("R1 接球待命計畫需要六名 Job 的有效站位快照。");
   }
@@ -98,13 +102,13 @@ export function createR1FormationStandbyPlan(team, positions, profile, reason) {
     throw new RangeError("R1 接球待命站位缺少必要 Job。");
   }
   if (!["RECEIVE", "DEFENSE"].includes(profile)) throw new RangeError("R1 待命配置必須為 RECEIVE 或 DEFENSE。");
-  return freezePlan(team, `${profile}_STANDBY`, reason, R1_JOBS.map((job) => ({
+  return Object.freeze({ ...freezePlan(team, `${profile}_STANDBY`, reason, R1_JOBS.map((job) => ({
     job,
     workType: DEFENSE_WORK[job],
     implementationStatus: "IMPLEMENTED",
     target: Object.freeze({ x: byJob.get(job).x, y: byJob.get(job).y }),
     moveEnabled: true,
-  })));
+  }))), rotation });
 }
 
 export function createR1DefensePlan(team, reason) {
@@ -119,25 +123,26 @@ export function createR1DefensePlan(team, reason) {
   })));
 }
 
-export function getR1BlockJobs(attackType) {
-  const jobs = R1_BLOCK_JOB_MAP[attackType];
+export function getR1BlockJobs(attackType, rotation = "R1") {
+  const jobs = getRotationConfig(rotation).blocks[attackType];
   if (!jobs) throw new RangeError(`R1 尚未定義 ${attackType} 的攔網責任。`);
   return jobs;
 }
 
-export function createR1BlockPlan(team, attackType, laneY, defensePositions = null) {
+export function createR1BlockPlan(team, attackType, laneY, defensePositions = null, rotation = "R1") {
   if (!Number.isFinite(laneY)) throw new TypeError("攔網路線 Y 必須為有限數值。");
-  const blockers = getR1BlockJobs(attackType);
+  const blockers = getR1BlockJobs(attackType, rotation);
   const defense = defensePositions
-    ? createR1FormationStandbyPlan(team, defensePositions, "DEFENSE", `OPPONENT_${attackType}`)
+    ? createR1FormationStandbyPlan(team, defensePositions, "DEFENSE", `OPPONENT_${attackType}`, rotation)
     : createR1DefensePlan(team, `OPPONENT_${attackType}`);
   const x = team === "HOME" ? SIMULATOR_WORLD.width / 2 - 70 : SIMULATOR_WORLD.width / 2 + 70;
   const innerDirection = Math.sign(SIMULATOR_WORLD.height / 2 - laneY) || 1;
-  return freezePlan(team, "BLOCK_PREPARE", `OPPONENT_${attackType}`, defense.assignments.map((entry) => {
+  return Object.freeze({ ...freezePlan(team, "BLOCK_PREPARE", `OPPONENT_${attackType}`, defense.assignments.map((entry) => {
     const index = blockers.indexOf(entry.job);
     if (index < 0) return entry;
+    const middleBlocker = getRotationConfig(rotation).front.find((job) => job.startsWith("MB"));
     const offset = blockers.length === 2
-      ? (entry.job === "MB1" ? innerDirection : -innerDirection) * 30 : 0;
+      ? (entry.job === middleBlocker ? innerDirection : -innerDirection) * 30 : 0;
     return {
       ...entry,
       workType: `BLOCK_${attackType}`,
@@ -145,24 +150,21 @@ export function createR1BlockPlan(team, attackType, laneY, defensePositions = nu
       target: Object.freeze({ x, y: Math.max(120, Math.min(SIMULATOR_WORLD.height - 120, laneY + offset)) }),
       moveEnabled: true,
     };
-  }));
+  })), rotation });
 }
 
 export function createR1AttackPreparationPlan(team, {
   firstTouchJob,
   attackConfigurations = {},
+  rotation = "R1",
 } = {}) {
   const alternateSetter = firstTouchJob === "S";
-  const workByJob = {
-    S: alternateSetter ? R1_WORK_TYPES.HOLD : R1_WORK_TYPES.SET,
-    OH1: attackConfigurations.OH1?.workType ?? R1_WORK_TYPES.PREPARE_BACK_LONG,
-    OH2: R1_WORK_TYPES.PREPARE_BACK_CENTER_ATTACK,
-    MB1: R1_WORK_TYPES.PREPARE_MIDDLE_QUICK,
-    MB2: R1_WORK_TYPES.HOLD,
-    OP: alternateSetter ? R1_WORK_TYPES.ALTERNATE_SET
-      : attackConfigurations.OP?.workType ?? R1_WORK_TYPES.PREPARE_LONG,
-  };
-  return freezePlan(team, "ATTACK_PREPARE", "RECEIVE_SUCCESS", R1_JOBS.map((job) => ({
+  const alternateSetterJob = getRotationConfig(rotation).alternateSet.setterJob;
+  const workByJob = Object.fromEntries(R1_JOBS.map((job) => [job,
+    job === "S" ? (alternateSetter ? R1_WORK_TYPES.HOLD : R1_WORK_TYPES.SET)
+      : alternateSetter && job === alternateSetterJob ? R1_WORK_TYPES.ALTERNATE_SET
+        : attackConfigurations[job]?.workType ?? R1_WORK_TYPES.HOLD]));
+  return Object.freeze({ ...freezePlan(team, "ATTACK_PREPARE", "RECEIVE_SUCCESS", R1_JOBS.map((job) => ({
     job,
     workType: workByJob[job],
     implementationStatus: ["S", "OH1", "OH2", "MB1", "MB2", "OP"].includes(job)
@@ -170,6 +172,6 @@ export function createR1AttackPreparationPlan(team, {
     target: attackConfigurations[job]?.readyPosition
       ? Object.freeze({ ...attackConfigurations[job].readyPosition }) : null,
     moveEnabled: Boolean(attackConfigurations[job]?.readyPosition)
-      && !(alternateSetter && job === "OP") && job !== "MB2",
-  })));
+      && !(alternateSetter && job === alternateSetterJob),
+  }))), rotation });
 }

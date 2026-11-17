@@ -1,4 +1,5 @@
 import { ContinuousRallySimulator, RALLY_TEAMS } from "./continuous-rally-simulator.js";
+import { nextRallyRotation } from "./rotation-config.js";
 
 export const CONTINUOUS_RALLY_INTERMISSION = 0.8;
 
@@ -16,6 +17,7 @@ export class ContinuousRallySession {
     this.scores = { HOME: 0, AWAY: 0 };
     this.rallyNumber = 0;
     this.servingTeam = RALLY_TEAMS.HOME;
+    this.rotations = { HOME: "R1", AWAY: "R1" };
     this.settledRallyNumber = null;
     this.intermissionRemaining = 0;
     this.results = [];
@@ -27,11 +29,13 @@ export class ContinuousRallySession {
   }
 
   start({ firstServingTeam = RALLY_TEAMS.HOME, serveType = null,
+    rotations = { HOME: "R1", AWAY: "R1" },
     serveAbility = null, serverPlayerId = null } = {}) {
     if (!Object.values(RALLY_TEAMS).includes(firstServingTeam)) throw new RangeError("首球發球方必須為 HOME 或 AWAY。");
     this.resetSessionState();
     this.active = true;
     this.servingTeam = firstServingTeam;
+    this.rotations = this.simulator.validateRotations(rotations);
     this.serveOptions = { serveType, serveAbility, serverPlayerId };
     this.startNextRally();
     return this.getSnapshot();
@@ -46,6 +50,7 @@ export class ContinuousRallySession {
     this.settledRallyNumber = null;
     this.intermissionRemaining = 0;
     this.simulator.seed = this.seedForRally(this.rallyNumber);
+    this.simulator.configureRotations(this.rotations);
     this.simulator.configureServe({ servingTeam: this.servingTeam,
       serverPlayerId: this.serveOptions.serverPlayerId,
       ability: this.serveOptions.serveAbility, serveType: this.serveOptions.serveType });
@@ -57,6 +62,10 @@ export class ContinuousRallySession {
     const result = this.simulator.rallyResult;
     if (!Object.values(RALLY_TEAMS).includes(result?.scoringTeam)) throw new Error("Rally 結束但缺少合法得分方。");
     this.scores[result.scoringTeam] += 1;
+    if (result.scoringTeam !== this.servingTeam) {
+      this.rotations = Object.freeze({ ...this.rotations,
+        [result.scoringTeam]: nextRallyRotation(this.rotations[result.scoringTeam]) });
+    }
     this.servingTeam = result.scoringTeam;
     this.settledRallyNumber = this.rallyNumber;
     this.intermissionRemaining = this.intermissionDuration;
@@ -84,7 +93,8 @@ export class ContinuousRallySession {
       && this.intermissionRemaining > 0;
     return Object.freeze({ ...snapshot, status: betweenRallies ? "FINISHING" : snapshot.status,
       session: Object.freeze({ active: this.active, rallyNumber: this.rallyNumber,
-        servingTeam: this.servingTeam, scores: Object.freeze({ ...this.scores }),
+        servingTeam: this.servingTeam, rotations: Object.freeze({ ...this.rotations }),
+        scores: Object.freeze({ ...this.scores }),
         settled: this.settledRallyNumber === this.rallyNumber,
         intermissionRemaining: this.intermissionRemaining,
         results: Object.freeze([...this.results]) }) });
