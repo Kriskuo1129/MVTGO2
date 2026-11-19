@@ -7,7 +7,7 @@ import { LINEUP_POSITIONS } from "../src/lineup/starting-lineup.js";
 import { SimulatorCameraController, CAMERA_MODES } from "../src/simulator/camera-controller.js";
 import { TeamSimulatorRenderer } from "../src/simulator/team-simulator-renderer.js";
 import { SixPlayerReceiveSimulator } from "../src/simulator/team-simulator.js";
-import { SIMULATOR_WORLD } from "../src/simulator/simulator.js";
+import { SIMULATOR_WORLD } from "../src/simulator/simulator-core.js";
 
 let data = validateAttackPositions({ version: 1, receivingSide: "RIGHT", entries: [] });
 let index = 0;

@@ -1,5 +1,5 @@
 import { SPIKE_COURT_V1 } from "./spike-court.js";
-import { TEAM_RECEIVE_FORMATION, TEAM_SIMULATOR_AVATAR_SIZE } from "./team-simulator.js";
+import { TEAM_RECEIVE_FORMATION, TEAM_SIMULATOR_AVATAR_SIZE } from "./team-simulator-config.js";
 
 export const CONTINUOUS_FORMATION_VERSION = "CONTINUOUS_FORMATION_V3";
 export const CONTINUOUS_FORMATION_STORAGE_KEY = "mvtgo2.continuousFormation.v3";

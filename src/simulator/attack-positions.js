@@ -1,5 +1,5 @@
 import { LINEUP_POSITIONS } from "../lineup/starting-lineup.js";
-import { SIMULATOR_WORLD } from "./simulator.js";
+import { SIMULATOR_WORLD } from "./simulator-core.js";
 
 export const ATTACK_POSITION_VERSION = 1;
 export const ATTACK_ROTATIONS = Object.freeze(["R1", "R2", "R3", "R4", "R5", "R6"]);

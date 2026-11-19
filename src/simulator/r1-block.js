@@ -1,4 +1,4 @@
-import { SIMULATOR_WORLD } from "./simulator.js";
+import { SIMULATOR_WORLD } from "./simulator-core.js";
 import { BLOCK_PHYSICS_PARAMETERS } from "./config/block-config.js";
 
 export const R1_BLOCK_PHYSICS_V1 = BLOCK_PHYSICS_PARAMETERS;

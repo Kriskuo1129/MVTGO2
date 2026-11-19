@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="排球">
+  <defs>
+    <clipPath id="ball-clip"><circle cx="50" cy="50" r="49"/></clipPath>
+    <radialGradient id="ball-light" cx="34%" cy="28%" r="72%">
+      <stop offset="0" stop-color="#fffef6"/><stop offset="0.7" stop-color="#f5f1df"/>
+      <stop offset="1" stop-color="#ddd6bf"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#ball-clip)">
+    <circle cx="50" cy="50" r="50" fill="url(#ball-light)"/>
+    <path d="M49 1C66 16 72 31 70 48C59 40 46 34 31 33C35 19 41 9 49 1Z" fill="#6f9fc8"/>
+    <path d="M70 48C87 48 96 54 103 66C87 75 72 77 57 72C64 65 68 57 70 48Z" fill="#e4bd55"/>
+    <path d="M57 72C50 87 41 96 27 103C16 90 11 77 12 63C28 70 43 73 57 72Z" fill="#6f9fc8"/>
+    <path d="M12 63C1 52-4 39-2 25C10 19 21 21 31 33C21 42 15 52 12 63Z" fill="#e4bd55"/>
+    <g fill="none" stroke="#25313a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M49 1C66 16 72 31 70 48C59 40 46 34 31 33C35 19 41 9 49 1Z"/>
+      <path d="M70 48C87 48 96 54 103 66C87 75 72 77 57 72C64 65 68 57 70 48Z"/>
+      <path d="M57 72C50 87 41 96 27 103C16 90 11 77 12 63C28 70 43 73 57 72Z"/>
+      <path d="M12 63C1 52-4 39-2 25C10 19 21 21 31 33C21 42 15 52 12 63Z"/>
+    </g>
+    <ellipse cx="34" cy="25" rx="23" ry="13" fill="#fff" opacity="0.22" transform="rotate(-28 34 25)"/>
+  </g>
+</svg>

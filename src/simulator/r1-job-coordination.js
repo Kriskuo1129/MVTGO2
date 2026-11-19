@@ -1,4 +1,4 @@
-import { SIMULATOR_WORLD } from "./simulator.js";
+import { SIMULATOR_WORLD } from "./simulator-core.js";
 import { getRotationConfig } from "./rotation-config.js";
 
 export const R1_JOBS = Object.freeze(["S", "OH1", "OH2", "MB1", "MB2", "OP"]);

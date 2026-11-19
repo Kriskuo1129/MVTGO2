@@ -1,6 +1,7 @@
 import { FormalMatchSession, FORMAL_MATCH_STATES } from "./formal-match-session.js";
 import { FormalMatchRenderer } from "./formal-match-renderer.js";
-import { createFormalMatchTestTeams, FORMAL_MATCH_DEMO_SEED } from "./formal-match-test-data.js";
+import { createFormalMatchTestTeams } from "./formal-match-test-data.js";
+import { createMatchSeedSource } from "./match-seed.js";
 import { resolveTacticCard } from "./formal-tactics.js";
 import { FORMAL_MATCH_VISUALS } from "./config/formal-match-renderer-config.js";
 import { createPlayerAvatarElement } from "../display/player-avatar.js";
@@ -27,7 +28,8 @@ function rallyMessage(snapshot) {
   return `${event.team ? `${event.team}｜` : ""}${event.type}`;
 }
 
-export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTestTeams() }) {
+export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTestTeams(),
+  seed = null, seedFactory } = {}) {
   if (!root || typeof onExit !== "function") throw new TypeError("正式比賽頁需要 root 與 onExit。 ");
   const renderer = new FormalMatchRenderer({ root });
   const controls = {
@@ -48,6 +50,8 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
   let autoplay = false;
   let visible = false;
   let configuredTeams = cloneTeams(teams);
+  const seedSource = createMatchSeedSource({ fixedSeed: seed,
+    ...(seedFactory ? { randomSeed: seedFactory } : {}) });
   const listeners = new AbortController();
 
   function stopFrame() {
@@ -164,11 +168,28 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
 
   function startMatch() {
     stopFrame(); stopAutoTimer();
-    match = new FormalMatchSession({ teams: cloneTeams(configuredTeams), seed: FORMAL_MATCH_DEMO_SEED });
+    if (!match || match.getSnapshot().status !== FORMAL_MATCH_STATES.NOT_STARTED) {
+      match = createSession();
+    }
     match.start();
     renderer.resetRally(match.getSnapshot().rallyNumber);
     renderMatch();
     runCurrentRally();
+  }
+
+  function restartMatch() {
+    stopFrame(); stopAutoTimer();
+    autoplay = false;
+    match = createSession();
+    match.start();
+    renderMatch();
+    runCurrentRally();
+  }
+
+  function createSession() {
+    const matchSeed = seedSource.next();
+    console.info(`[FormalMatch] seed=${matchSeed}`);
+    return new FormalMatchSession({ teams: cloneTeams(configuredTeams), seed: matchSeed });
   }
 
   function startNextRally() {
@@ -188,7 +209,7 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
 
   controls.start.addEventListener("click", startMatch, { signal: listeners.signal });
   controls.next.addEventListener("click", startNextRally, { signal: listeners.signal });
-  controls.restart.addEventListener("click", startMatch, { signal: listeners.signal });
+  controls.restart.addEventListener("click", restartMatch, { signal: listeners.signal });
   controls.auto.addEventListener("click", () => {
     autoplay = !autoplay;
     if (!autoplay) stopAutoTimer(); else scheduleAuto();
@@ -220,7 +241,7 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
     visible = true;
     root.hidden = false;
     if (!match) {
-      match = new FormalMatchSession({ teams: cloneTeams(configuredTeams), seed: FORMAL_MATCH_DEMO_SEED });
+      match = createSession();
       renderMatch();
     }
     if (match.getSnapshot().status === FORMAL_MATCH_STATES.RALLY_RUNNING) runCurrentRally();

@@ -15,6 +15,26 @@ export function resolveDisplayedSpeed(snapshot) {
   return "SLOW";
 }
 
+export function resolveActualBallSpeed(snapshot) {
+  const velocity = snapshot?.ballVelocity;
+  return velocity ? Math.hypot(velocity.x ?? 0, velocity.y ?? 0, velocity.height ?? 0) : 0;
+}
+
+export function resolveBallSpinRate(speed) {
+  const anchors = FORMAL_MATCH_VISUALS.ballSpin.speedAnchors;
+  if (!Number.isFinite(speed) || speed <= anchors[0].speed) return anchors[0].degreesPerSecond;
+  for (let index = 1; index < anchors.length; index += 1) {
+    const lower = anchors[index - 1];
+    const upper = anchors[index];
+    if (speed <= upper.speed) {
+      const progress = (speed - lower.speed) / (upper.speed - lower.speed);
+      return lower.degreesPerSecond
+        + (upper.degreesPerSecond - lower.degreesPerSecond) * progress;
+    }
+  }
+  return anchors.at(-1).degreesPerSecond;
+}
+
 const BALL_DIRECTION_EVENTS = Object.freeze(new Set([
   "SERVE_CONTACT", "RECEIVE_OUTPUT", "RECEIVE_ERROR", "SET_RESULT",
   "ATTACK_STARTED", "BLOCK_RESULT", "FINISHING_BOUNCE",
@@ -26,19 +46,7 @@ export function resolveBallFlightSegmentKey(snapshot) {
   return `${snapshot?.ballFlightId ?? 0}:${directionEventCount}`;
 }
 
-export function resolveBallFlightAngle(snapshot) {
-  const launchEvent = [...(snapshot?.events ?? [])].reverse().find((event) =>
-    ["SERVE_CONTACT", "ATTACK_STARTED"].includes(event.type) && event.outgoingVelocity);
-  const velocity = launchEvent?.outgoingVelocity
-    ?? snapshot?.ballVelocity ?? { x: 0, y: 0, height: 0 };
-  const screenVelocityY = (velocity.y ?? 0) - (velocity.height ?? 0);
-  if (Math.hypot(velocity.x ?? 0, screenVelocityY) <= 1e-6) return 0;
-  const rawAngle = Math.atan2(screenVelocityY, velocity.x ?? 0) * 180 / Math.PI;
-  // 橢圓 0° 與 180° 視覺相同，正規化可避免左右飛行時多轉半圈。
-  return ((rawAngle + 90) % 180 + 180) % 180 - 90;
-}
-
-export function isBallDeformationPhase(snapshot) {
+export function isBallSpinPhase(snapshot) {
   if (!["SERVE_FLIGHT", "ATTACK_FLIGHT"].includes(snapshot?.rallyPhase)
     || snapshot?.rallyResult) return false;
   const latestContact = [...(snapshot?.events ?? [])].reverse().find((event) => [
@@ -48,14 +56,24 @@ export function isBallDeformationPhase(snapshot) {
   return latestContact?.type === "SERVE_CONTACT" || latestContact?.type === "ATTACK_STARTED";
 }
 
-export function resolveBallDeformation(snapshot, flightAngle = resolveBallFlightAngle(snapshot)) {
-  if (!isBallDeformationPhase(snapshot)) {
-    return Object.freeze({ speedLevel: "SLOW", angle: flightAngle, scaleX: 1, scaleY: 1,
-      enabled: false });
-  }
+export function resolveBallSpinProfile(snapshot) {
   const speedLevel = resolveDisplayedSpeed(snapshot);
-  return Object.freeze({ speedLevel, angle: flightAngle,
-    ...FORMAL_MATCH_VISUALS.ballDeformation[speedLevel], enabled: speedLevel !== "SLOW" });
+  if (!isBallSpinPhase(snapshot)) return Object.freeze({ enabled: false, direction: 0,
+    degreesPerSecond: 0, speedLevel, startedAt: null });
+  const launchEvent = [...(snapshot?.events ?? [])].reverse().find((event) =>
+    ["SERVE_CONTACT", "ATTACK_STARTED"].includes(event.type) && event.outgoingVelocity);
+  const horizontalVelocity = launchEvent?.outgoingVelocity?.x ?? snapshot?.ballVelocity?.x ?? 0;
+  const epsilon = FORMAL_MATCH_VISUALS.ballSpin.horizontalSpeedEpsilon;
+  const direction = Math.abs(horizontalVelocity) < epsilon ? 0 : Math.sign(horizontalVelocity);
+  const actualSpeed = resolveActualBallSpeed(snapshot);
+  return Object.freeze({ enabled: direction !== 0, direction,
+    degreesPerSecond: resolveBallSpinRate(actualSpeed), actualSpeed, speedLevel,
+    startedAt: Number.isFinite(launchEvent?.time) ? launchEvent.time : snapshot?.simulationTime ?? 0 });
+}
+
+export function advanceBallSpinAngle(angle, elapsedSeconds, direction, degreesPerSecond) {
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0 || direction === 0) return angle;
+  return angle + elapsedSeconds * degreesPerSecond * direction;
 }
 
 export function isNetFinished(snapshot) {
@@ -68,11 +86,19 @@ export class FormalMatchRenderer {
     this.viewport = root.querySelector("#formal-match-viewport");
     this.worldElement = root.querySelector("#formal-match-world");
     this.ballElement = root.querySelector("#formal-match-ball");
+    this.ballArtwork = document.createElement("img");
+    this.ballArtwork.className = "formal-match-ball__artwork";
+    this.ballArtwork.src = "./assets/balls/volleyball.svg";
+    this.ballArtwork.alt = "";
+    this.ballElement.replaceChildren(this.ballArtwork);
     this.playerElements = new Map();
     this.processedEvents = 0;
     this.rallyNumber = null;
     this.ballFlightSegmentKey = null;
-    this.ballFlightAngle = 0;
+    this.ballSpinAngle = 0;
+    this.ballSpinDirection = 0;
+    this.ballSpinRate = 0;
+    this.ballSpinLastTime = null;
     this.lastSnapshot = null;
     this.resizeObserver = typeof ResizeObserver === "function"
       ? new ResizeObserver(() => this.lastSnapshot && this.render(this.lastSnapshot, this.rallyNumber)) : null;
@@ -83,7 +109,10 @@ export class FormalMatchRenderer {
     this.rallyNumber = rallyNumber;
     this.processedEvents = 0;
     this.ballFlightSegmentKey = null;
-    this.ballFlightAngle = 0;
+    this.ballSpinAngle = 0;
+    this.ballSpinDirection = 0;
+    this.ballSpinRate = 0;
+    this.ballSpinLastTime = null;
     this.ballElement.classList.remove("is-net-finished");
   }
 
@@ -212,19 +241,25 @@ export class FormalMatchRenderer {
     this.ballElement.style.left = `${snapshot.ball.x / world.width * 100}%`;
     this.ballElement.style.top = `${(snapshot.ball.y - snapshot.ball.height) / world.height * 100}%`;
     const segmentKey = resolveBallFlightSegmentKey(snapshot);
+    const spinProfile = resolveBallSpinProfile(snapshot);
     if (segmentKey !== this.ballFlightSegmentKey) {
       this.ballFlightSegmentKey = segmentKey;
-      this.ballFlightAngle = resolveBallFlightAngle(snapshot);
+      this.ballSpinDirection = spinProfile.direction;
+      this.ballSpinRate = spinProfile.degreesPerSecond;
+      this.ballSpinLastTime = spinProfile.startedAt ?? snapshot.simulationTime;
     }
-    const ballVisual = resolveBallDeformation(snapshot, this.ballFlightAngle);
-    const speedLevel = ballVisual.speedLevel;
-    this.ballElement.dataset.speed = speedLevel;
-    this.ballElement.dataset.deformed = String(ballVisual.enabled);
-    this.ballElement.style.width = `${ballSize * ballVisual.scaleX}px`;
-    this.ballElement.style.height = `${ballSize * ballVisual.scaleY}px`;
-    this.ballElement.style.setProperty("--ball-flight-angle", `${ballVisual.angle}deg`);
-    this.ballElement.style.setProperty("--ball-shape-transition",
-      `${FORMAL_MATCH_VISUALS.ballDeformation.transitionMs}ms`);
+    this.ballSpinRate = spinProfile.degreesPerSecond;
+    const currentTime = snapshot.simulationTime ?? this.ballSpinLastTime ?? 0;
+    if (spinProfile.enabled && this.ballSpinLastTime !== null) {
+      this.ballSpinAngle = advanceBallSpinAngle(this.ballSpinAngle,
+        currentTime - this.ballSpinLastTime, this.ballSpinDirection, this.ballSpinRate);
+    }
+    this.ballSpinLastTime = currentTime;
+    this.ballElement.dataset.speed = spinProfile.speedLevel;
+    this.ballElement.dataset.spinning = String(spinProfile.enabled);
+    this.ballElement.style.width = `${ballSize}px`;
+    this.ballElement.style.height = `${ballSize}px`;
+    this.ballArtwork.style.transform = `rotate(${this.ballSpinAngle}deg)`;
     this.ballElement.classList.toggle("is-net-finished", isNetFinished(snapshot));
     this.processEvents(snapshot);
   }

@@ -12,11 +12,11 @@ import { createReceiveErrorTrajectory, RECEIVE_RESULTS, resolveReceiveContact,
   SECOND_PASS_TRAJECTORY_CONFIG, SECOND_TOUCH_TRAJECTORY_TUNING } from "./receive-quality.js";
 import { getReceiveSpeedProfile } from "./receive-animation.js";
 import { SIMULATOR_CONTACT_ANCHOR_DISTANCE, SIMULATOR_FIXED_STEP, SIMULATOR_MAX_FRAME_DELTA,
-  SIMULATOR_MAXIMUM_CONTACT_HEIGHT, SIMULATOR_WORLD, validateSimulatorParameters } from "./simulator.js";
+  SIMULATOR_MAXIMUM_CONTACT_HEIGHT, SIMULATOR_WORLD, validateSimulatorParameters } from "./simulator-core.js";
 import { SPIKE_COURT_V1, isSpikeGroundIn } from "./spike-court.js";
 import { sweepSpikeNet } from "./spike-flight.js";
 import { TEAM_RECEIVE_FORMATION, TEAM_SET_CONTACT_GEOMETRY, TEAM_SIMULATOR_AVATAR_SIZE,
-  TEAM_SIMULATOR_BALL_DISPLAY_SIZE, TEAM_SIMULATOR_PARAMETERS } from "./team-simulator.js";
+  TEAM_SIMULATOR_BALL_DISPLAY_SIZE, TEAM_SIMULATOR_PARAMETERS } from "./team-simulator-config.js";
 import { assignPrimaryReceiver } from "./team-coordination.js";
 import { ATTACK_MOVEMENT_PHASES, stepAttackAssignment } from "./attack-assignment.js";
 import { createContinuousFormationLibrary, DEFAULT_CONTINUOUS_FORMATION_LIBRARY,

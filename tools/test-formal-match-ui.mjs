@@ -3,9 +3,12 @@ import { readFile } from "node:fs/promises";
 import { createFormalMatchTestTeams, FORMAL_MATCH_DEMO_SEED } from
   "../src/simulator/formal-match-test-data.js";
 import { FormalRallyAdapter } from "../src/simulator/formal-rally-adapter.js";
-import { isNetFinished, resolveBallDeformation, resolveBallFlightAngle,
-  resolveBallFlightSegmentKey, resolveDisplayedSpeed, isBallDeformationPhase } from
+import { advanceBallSpinAngle, isBallSpinPhase, isNetFinished,
+  resolveActualBallSpeed, resolveBallFlightSegmentKey, resolveBallSpinProfile,
+  resolveBallSpinRate, resolveDisplayedSpeed } from
   "../src/simulator/formal-match-renderer.js";
+import { createMatchSeedSource, createRandomMatchSeed } from
+  "../src/simulator/match-seed.js";
 import { FORMAL_MATCH_VISUALS } from
   "../src/simulator/config/formal-match-renderer-config.js";
 import { resolveImpactLevel } from
@@ -55,17 +58,6 @@ assert.equal(getPlayerAvatarPresentation({ name: "錯位球員", position: "MB",
 
 assert.equal(resolveDisplayedSpeed({ ball: { speedLevel: "ULTRA_FAST" } }), "ULTRA_FAST");
 assert.equal(resolveDisplayedSpeed({ ball: {}, ballVelocity: { x: 1000, y: 0, height: 0 } }), "FAST");
-assert.deepEqual(FORMAL_MATCH_VISUALS.ballDeformation.SLOW, { scaleX: 1, scaleY: 1 });
-assert.ok(FORMAL_MATCH_VISUALS.ballDeformation.NORMAL.scaleX
-  < FORMAL_MATCH_VISUALS.ballDeformation.FAST.scaleX);
-assert.ok(FORMAL_MATCH_VISUALS.ballDeformation.FAST.scaleX
-  < FORMAL_MATCH_VISUALS.ballDeformation.ULTRA_FAST.scaleX);
-assert.equal(resolveBallDeformation({ ballVelocity: { x: 1000, y: 0, height: 0 } }).angle, 0);
-assert.equal(resolveBallDeformation({ ballVelocity: { x: 0, y: 1000, height: 0 } }).angle, -90);
-assert.equal(resolveBallDeformation({ ballVelocity: { x: 0, y: 0, height: 1000 } }).angle, -90,
-  "世界高度向上時，畫面移動方向必須向上。 ");
-assert.equal(resolveBallFlightAngle({ ballVelocity: { x: -1000, y: 0, height: 0 } }), 0,
-  "橢圓左右方向等價，不應產生 180° 旋轉。 ");
 const sameSegmentA = { ballFlightId: 4, events: [{ type: "SERVE_CONTACT" }] };
 const sameSegmentB = { ...sameSegmentA, ballVelocity: { x: 300, y: 500, height: -100 } };
 assert.equal(resolveBallFlightSegmentKey(sameSegmentA), resolveBallFlightSegmentKey(sameSegmentB),
@@ -78,37 +70,56 @@ assert.equal(isNetFinished({ rallyResult: { reason: "ATTACK_NET" } }), true);
 assert.equal(isNetFinished({ rallyResult: { reason: "BALL_LANDED" } }), false);
 
 const flightSnapshot = (rallyPhase, speedLevel, outgoingVelocity, extraEvents = []) => ({
-  rallyPhase, ball: { speedLevel }, ballVelocity: outgoingVelocity,
+  rallyPhase, simulationTime: 1, ball: { speedLevel }, ballVelocity: outgoingVelocity,
   events: [{ type: rallyPhase === "SERVE_FLIGHT" ? "SERVE_CONTACT" : "ATTACK_STARTED",
-    outgoingVelocity }, ...extraEvents],
+    time: 0, outgoingVelocity }, ...extraEvents],
 });
-const horizontalFast = flightSnapshot("SERVE_FLIGHT", "FAST", { x: 1000, y: 0, height: 0 });
-const verticalFast = flightSnapshot("ATTACK_FLIGHT", "FAST", { x: 0, y: 0, height: 1000 });
-const diagonalFast = flightSnapshot("ATTACK_FLIGHT", "FAST", { x: 800, y: 0, height: -800 });
-assert.equal(resolveBallDeformation(horizontalFast).angle, 0);
-assert.equal(resolveBallDeformation(verticalFast).angle, -90);
-assert.ok(Math.abs(resolveBallDeformation(diagonalFast).angle - 45) < 1e-9);
-for (const level of ["SLOW", "NORMAL", "FAST", "ULTRA_FAST"]) {
-  const visual = resolveBallDeformation(flightSnapshot("SERVE_FLIGHT", level,
-    { x: 1000, y: 0, height: 0 }));
-  assert.equal(visual.enabled, level !== "SLOW");
-  assert.equal(visual.scaleX, FORMAL_MATCH_VISUALS.ballDeformation[level].scaleX);
+const rightFast = flightSnapshot("SERVE_FLIGHT", "FAST", { x: 1000, y: 0, height: 0 });
+const leftFast = flightSnapshot("ATTACK_FLIGHT", "FAST", { x: -1000, y: 0, height: 0 });
+assert.equal(resolveBallSpinProfile(rightFast).direction, 1, "向右飛必須順時針。 ");
+assert.equal(resolveBallSpinProfile(leftFast).direction, -1, "向左飛必須逆時針。 ");
+assert.equal(resolveBallSpinProfile(flightSnapshot("SERVE_FLIGHT", "FAST",
+  { x: 0.5, y: 900, height: 0 })).enabled, false, "近乎垂直時不得抖動旋轉。 ");
+const spinAnchors = FORMAL_MATCH_VISUALS.ballSpin.speedAnchors;
+assert.deepEqual(spinAnchors.map(({ degreesPerSecond }) => degreesPerSecond), [360, 1080, 1800, 2880]);
+spinAnchors.forEach(({ speed, degreesPerSecond }) => {
+  assert.ok(Math.abs(resolveBallSpinRate(speed) - degreesPerSecond) < 1e-9);
+});
+const sampledRates = [0, 650, 850, 1000, 1300, 2000].map(resolveBallSpinRate);
+for (let index = 1; index < sampledRates.length; index += 1) {
+  assert.ok(sampledRates[index] >= sampledRates[index - 1], "實際球速提高時角速度不得下降。 ");
 }
-assert.equal(isBallDeformationPhase(horizontalFast), true);
+assert.equal(resolveBallSpinRate(-1), 360);
+assert.equal(resolveBallSpinRate(99999), 2880);
+assert.equal(resolveActualBallSpeed({ ballVelocity: { x: 300, y: 400, height: 0 } }), 500);
+assert.equal(isBallSpinPhase(rightFast), true);
 for (const phase of ["RECEIVE", "SET", "ATTACK", "FINISHING", "ENDED"]) {
-  const visual = resolveBallDeformation({ ...horizontalFast, rallyPhase: phase });
-  assert.deepEqual({ x: visual.scaleX, y: visual.scaleY }, { x: 1, y: 1 }, `${phase} 必須恢復圓形。`);
+  assert.equal(isBallSpinPhase({ ...rightFast, rallyPhase: phase }), false, `${phase} 不得旋轉。`);
 }
 const blocked = flightSnapshot("ATTACK_FLIGHT", "ULTRA_FAST", { x: 1200, y: 0, height: -200 },
   [{ type: "BLOCK_CONTACT" }, { type: "BLOCK_RESULT" }]);
-assert.equal(isBallDeformationPhase(blocked), false);
-assert.equal(resolveBallDeformation(blocked).scaleX, 1);
-const landed = { ...horizontalFast, rallyResult: { reason: "BALL_LANDED" } };
-assert.equal(resolveBallDeformation(landed).scaleX, 1);
-const sameLaunch30 = { ...diagonalFast, ballVelocity: { x: 790, y: 0, height: -760 } };
-const sameLaunch144 = { ...diagonalFast, ballVelocity: { x: 740, y: 0, height: -620 } };
-assert.equal(resolveBallFlightAngle(sameLaunch30), resolveBallFlightAngle(sameLaunch144),
-  "同一 launch event 的方向不得因 Renderer FPS 取樣時機不同。 ");
+assert.equal(isBallSpinPhase(blocked), false);
+const landed = { ...rightFast, rallyResult: { reason: "BALL_LANDED" } };
+assert.equal(isBallSpinPhase(landed), false);
+for (const fps of [30, 60, 144]) {
+  let angle = 0;
+  for (let frame = 0; frame < fps * 2; frame += 1) {
+    angle = advanceBallSpinAngle(angle, 1 / fps, 1, resolveBallSpinRate(1076.92));
+  }
+  assert.ok(Math.abs(angle - 3600) < 1e-8, `${fps} FPS 的兩秒旋轉角度必須相同。`);
+}
+const cryptoValues = [101, 202];
+const cryptoSource = { getRandomValues(array) { array[0] = cryptoValues.shift(); return array; } };
+assert.equal(createRandomMatchSeed({ cryptoSource }), 101);
+assert.equal(createRandomMatchSeed({ cryptoSource }), 202);
+const generatedSeeds = [303, 404];
+const randomSeedSource = createMatchSeedSource({ randomSeed: () => generatedSeeds.shift() });
+assert.equal(randomSeedSource.next(), 303, "新比賽必須取得新 Seed。 ");
+assert.equal(randomSeedSource.next(), 404, "重新開始必須取得新 Seed。 ");
+const fixedSeedSource = createMatchSeedSource({ fixedSeed: FORMAL_MATCH_DEMO_SEED,
+  randomSeed: () => { throw new Error("固定 Seed 不得呼叫隨機來源。 "); } });
+assert.equal(fixedSeedSource.next(), FORMAL_MATCH_DEMO_SEED);
+assert.equal(fixedSeedSource.next(), FORMAL_MATCH_DEMO_SEED);
 assert.equal(resolveImpactLevel(400), "MILD");
 assert.equal(resolveImpactLevel(800), "NOTICEABLE");
 assert.equal(resolveImpactLevel(1200), "STRONG");
@@ -138,7 +149,7 @@ const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const css = await readFile(new URL("../src/styles/main.css", import.meta.url), "utf8");
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
 assert.equal(new Set(ids).size, ids.length, "index.html 不得產生重複 DOM id。 ");
-for (const id of ["formal-match-button", "formal-match-view", "formal-match-viewport",
+for (const id of ["match-test-button", "formal-match-view", "formal-match-viewport",
   "formal-match-start", "formal-match-next", "formal-match-auto", "formal-match-pause",
   "formal-match-substitute", "formal-match-tactics"]) assert.ok(ids.includes(id), `缺少 ${id}。`);
 assert.doesNotMatch(html, /formal-match-(sets-home|sets-away|server|status|rally)/,

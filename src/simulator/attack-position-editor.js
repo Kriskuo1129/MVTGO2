@@ -1,5 +1,5 @@
 import { LINEUP_POSITIONS } from "../lineup/starting-lineup.js";
-import { SIMULATOR_WORLD } from "./simulator.js";
+import { SIMULATOR_WORLD } from "./simulator-core.js";
 import {
   ATTACK_ROTATIONS, ATTACK_TYPE_LABELS, ATTACK_POSITION_BOUNDS, DEFAULT_ATTACK_POSITIONS,
   getAttackPosition, setAttackPosition, validateAttackPositions,

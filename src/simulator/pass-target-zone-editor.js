@@ -2,7 +2,7 @@ import {
   createPassTargetZones,
   PASS_TARGET_ZONES_V1,
 } from "./pass-target-zones.js";
-import { SIMULATOR_WORLD } from "./simulator.js";
+import { SIMULATOR_WORLD } from "./simulator-core.js";
 
 export const RECEIVING_SIDE_EDIT_BOUNDS = Object.freeze({
   minX: SIMULATOR_WORLD.width / 2,

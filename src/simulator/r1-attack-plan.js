@@ -1,6 +1,6 @@
 import { ATTACK_TYPES, DEFAULT_ATTACK_POSITIONS } from "./attack-positions.js";
 import { ATTACK_MOTION_V1, strikeElapsed } from "./attack-motion.js";
-import { SIMULATOR_WORLD } from "./simulator.js";
+import { SIMULATOR_WORLD } from "./simulator-core.js";
 import { getRotationConfig } from "./rotation-config.js";
 
 export const R1_ATTACK_PLAN_VERSION = "R1_ATTACK_PLAN_V1";
