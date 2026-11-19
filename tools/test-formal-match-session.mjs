@@ -123,7 +123,9 @@ assert.ok(["HOME", "AWAY"].includes(realMatch.getMatchResult()?.winner));
 assert.ok(realMatch.rallyResults.length >= 30);
 assert.ok(realMatch.rallyResults.every((rally) => rally.events.some((event) => event.type === "RALLY_ENDED")));
 assert.equal(realMatch.getRallySnapshot().playerInputMode, "EXTERNAL");
-assert.ok(realMatch.getRallySnapshot().players.some((player) => player.attack === 78));
+assert.ok(realMatch.getRallySnapshot().players.some((player) => player.rawAbilities?.attack === 78
+  && Number.isInteger(player.effectiveAbilities?.attack)),
+"正式 Match 必須保留外部原始能力，並以跨 Rally 士氣計算有效能力。 ");
 const realRepeat = runRealMatch(3152026);
 assert.deepEqual(realMatch.getMatchResult(), realRepeat.getMatchResult());
 assert.deepEqual(realMatch.rallyResults.map((rally) => ({ seed: rally.seed,

@@ -25,6 +25,9 @@
             <button id="match-test-button" class="secondary-button" type="button">
               比賽測試系統
             </button>
+            <button id="formal-match-button" class="primary-button" type="button">
+              模擬比賽
+            </button>
             <button id="simulator-button" class="secondary-button" type="button">
               單人追球實驗
             </button>
@@ -33,6 +36,62 @@
             </button>
           </div>
         </div>
+      </section>
+
+      <section id="formal-match-view" class="formal-match-view" aria-labelledby="formal-match-title" hidden>
+        <header class="simulator-header formal-match-header">
+          <div>
+            <p class="eyebrow">FORMAL MATCH</p>
+            <h1 id="formal-match-title" tabindex="-1">模擬比賽</h1>
+          </div>
+          <button id="formal-match-back" class="secondary-button" type="button">返回首頁</button>
+        </header>
+
+        <div id="formal-match-viewport" class="simulator-viewport formal-match-viewport" aria-label="正式比賽球場">
+          <div id="formal-match-world" class="team-simulator-world formal-match-world">
+            <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
+            <span id="formal-match-ball" class="simulator-ball formal-match-ball" hidden aria-label="排球"></span>
+          </div>
+          <section class="formal-match-scoreboard" aria-label="正式比賽比分">
+            <p><strong>HOME</strong> <em id="formal-match-score-home">0</em></p>
+            <p><strong>SET</strong> <em id="formal-match-set">—</em></p>
+            <p><strong>AWAY</strong> <em id="formal-match-score-away">0</em></p>
+          </section>
+        </div>
+
+        <section class="formal-match-coach" aria-label="教練操作">
+          <p id="formal-match-message" class="formal-match-message" aria-live="polite">等待比賽開始。</p>
+          <div class="formal-match-primary-controls">
+            <button id="formal-match-start" class="primary-button" type="button">開始比賽</button>
+            <button id="formal-match-next" class="primary-button" type="button" disabled>下一球</button>
+            <button id="formal-match-auto" class="secondary-button" type="button" disabled>自動播放</button>
+            <button id="formal-match-pause" class="secondary-button" type="button" disabled>暫停</button>
+            <button id="formal-match-restart" class="secondary-button" type="button">重新開始</button>
+          </div>
+          <p class="formal-match-meta">士氣：<span id="formal-match-morale">HOME 30｜AWAY 30</span></p>
+
+          <details class="formal-match-panel">
+            <summary>換人</summary>
+            <div class="formal-match-operation-grid">
+              <label>場上 Job<select id="formal-match-sub-job"><option>S</option><option>OH1</option><option>MB1</option><option>OP</option><option>OH2</option><option>MB2</option></select></label>
+              <label>替補球員<span class="formal-match-sub-player"><span id="formal-match-sub-avatar"></span><select id="formal-match-sub-player"></select></span></label>
+              <button id="formal-match-substitute" class="secondary-button" type="button" disabled>確認換人</button>
+              <p>本局換人：<b id="formal-match-sub-count">0／6</b></p>
+            </div>
+          </details>
+
+          <details class="formal-match-panel">
+            <summary>戰術卡</summary>
+            <p class="formal-match-panel__note">每球最多一張，效果由 Match Session 於下一球套用。</p>
+            <div id="formal-match-tactics" class="formal-match-tactics"></div>
+          </details>
+
+          <details class="formal-match-panel">
+            <summary>詳細診斷</summary>
+            <pre id="formal-match-diagnostics" class="formal-match-diagnostics"></pre>
+          </details>
+          <p id="formal-match-result" class="formal-match-result" hidden></p>
+        </section>
       </section>
 
       <section id="simulator-view" class="simulator-view" aria-labelledby="simulator-title" hidden>

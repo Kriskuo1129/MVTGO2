@@ -91,7 +91,7 @@ function run(rotation, seed, fps = 60) {
 for (const rotation of RALLY_ROTATIONS) {
   const expectedTypes = new Set(Object.values(EXPECTED[rotation].attacks));
   const actualTypes = new Set();
-  for (const seed of [1, 2, 3]) {
+  for (const seed of [1, 2, 3, 4, 5]) {
     const snapshot = run(rotation, seed);
     for (const touch of snapshot.events.filter((event) => event.type === "RECEIVE_TOUCH")) {
       const phase = snapshot.events.slice(0, snapshot.events.indexOf(touch) + 1).reverse()
@@ -115,7 +115,7 @@ for (const rotation of RALLY_ROTATIONS) {
   assert.deepEqual(core(run(rotation, 1, 144)), core(run(rotation, 1, 60)));
 }
 
-for (const [rotation, seed] of [["R1", 1], ["R6", 6], ["R5", 23]]) {
+for (const [rotation, seed] of [["R1", 5], ["R6", 2], ["R5", 2]]) {
   const snapshot = run(rotation, seed);
   const sTouch = snapshot.events.find((event) => event.type === "RECEIVE_TOUCH" && event.job === "S");
   assert.ok(sTouch, `${rotation} Seed ${seed} 必須包含 S 真實第一觸球。`);

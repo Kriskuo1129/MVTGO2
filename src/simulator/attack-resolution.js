@@ -5,6 +5,7 @@ import {
   ATTACK_SET_QUALITY_MODIFIERS,
   ATTACK_SPEED_UNLOCKS,
   ATTACK_TARGET_CONFIG,
+  ATTACK_QUALITY_THRESHOLDS,
 } from "./config/attack-config.js";
 
 export const SET_QUALITY_MODIFIERS = ATTACK_SET_QUALITY_MODIFIERS;
@@ -131,8 +132,8 @@ export function resolveAttackOutput({ attack, attackConsistency, setQuality, see
   court = SPIKE_COURT_V1 }) {
   const effective = applySetQualityModifiers(attack, attackConsistency, setQuality);
   const channels = createAttackRandomChannels(seed);
-  // 球速只看原始 attack；舉球品質不解鎖、也不改變球速分布。
-  const rawSpeedWeights = getAttackSpeedWeights(attack);
+  // 舉球品質可調整已解鎖球速間的威力分布，但解鎖門檻仍只看原始 attack。
+  const rawSpeedWeights = getAttackSpeedWeights(effective.effectiveAttack);
   const speedWeights = applySpikeSpeedUnlocks(rawSpeedWeights, attack);
   const speedLevel = selectWeighted(speedWeights, channels.speed);
   const inProbability = getInTargetProbability(effective.effectiveConsistency);
@@ -140,7 +141,11 @@ export function resolveAttackOutput({ attack, attackConsistency, setQuality, see
   const targetPoint = targetInBounds
     ? sampleUniformQuadrilateral(LEFT_LONG_TARGET_V1.inBoundsPolygon, channels.targetPoint)
     : sampleNaturalOutTarget(channels.targetPoint, court);
-  return Object.freeze({ ...effective, rawAttack: attack, rawSpeedWeights, speedWeights,
+  const qualityScore = (effective.effectiveAttack + effective.effectiveConsistency) / 2;
+  const attackQuality = qualityScore >= ATTACK_QUALITY_THRESHOLDS.perfect ? "PERFECT"
+    : qualityScore >= ATTACK_QUALITY_THRESHOLDS.normal ? "NORMAL" : "BAD";
+  return Object.freeze({ ...effective, attackQuality, qualityScore,
+    rawAttack: attack, rawSpeedWeights, speedWeights,
     highestUnlockedSpeed: getHighestUnlockedSpikeSpeed(attack), speedLevel, inProbability,
     targetInBounds, targetPoint });
 }

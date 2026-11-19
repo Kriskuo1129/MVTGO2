@@ -65,19 +65,32 @@ export function detectSweptBlockContact({ previousBall, currentBall, previousPla
     playerJumpHeight: lerp(previousPlayer.blockJumpHeight ?? 0, currentPlayer.blockJumpHeight ?? 0) });
 }
 
-export function createBlockRebound({ contact, incomingVelocity, attackingTeam,
+export function createBlockRebound({ contact, incomingVelocity, attackingTeam, blockAbility = 50,
   config = R1_BLOCK_PHYSICS_V1 }) {
-  const direct = contact.normalizedDistance <= config.directBlockThreshold;
+  if (!Number.isInteger(blockAbility) || blockAbility < 1 || blockAbility > 99) {
+    throw new RangeError("攔網能力必須是 1～99。 ");
+  }
+  const centeredAbility = (blockAbility - 50) / 49;
+  const effectiveThreshold = Math.max(config.minimumDirectThreshold,
+    Math.min(config.maximumDirectThreshold, config.directBlockThreshold
+      + centeredAbility * config.abilityDirectThresholdAdjustment));
+  const direct = contact.normalizedDistance <= effectiveThreshold;
   const attackDirection = attackingTeam === "HOME" ? 1 : -1;
   const xSign = direct ? -attackDirection : attackDirection;
   const retention = direct ? config.stuffHorizontalRetention : config.touchHorizontalRetention;
+  const powerMultiplier = config.minimumPowerMultiplier
+    + (config.maximumPowerMultiplier - config.minimumPowerMultiplier) * (blockAbility - 1) / 98;
+  const qualityScore = blockAbility + (1 - contact.normalizedDistance) * 20;
+  const quality = qualityScore >= config.qualityPerfectScore ? "PERFECT"
+    : qualityScore >= config.qualityNormalScore ? "NORMAL" : "BAD";
   return Object.freeze({
     result: direct ? "STUFF_BLOCK" : "BLOCK_TOUCH",
+    quality, qualityScore, blockAbility, effectiveThreshold, powerMultiplier,
     velocity: Object.freeze({
       x: xSign * Math.max(config.minimumReboundHorizontalSpeed,
-        Math.abs(incomingVelocity.x) * retention),
+        Math.abs(incomingVelocity.x) * retention * powerMultiplier),
       y: incomingVelocity.y * config.lateralRetention,
-      height: config.reboundVerticalSpeed,
+      height: config.reboundVerticalSpeed * powerMultiplier,
     }),
     receivingTeam: direct ? attackingTeam : (attackingTeam === "HOME" ? "AWAY" : "HOME"),
   });

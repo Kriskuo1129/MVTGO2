@@ -109,15 +109,27 @@ export function evaluateR1AttackCandidates(plan, players) {
   });
 }
 
-export function selectR1AttackCandidate(plan, players, random) {
+export function selectR1AttackCandidate(plan, players, random, tactic = null) {
   if (plan.selectedPlayerId) throw new Error("本次攻擊計畫已鎖定攻擊手。");
   if (typeof random !== "function") throw new TypeError("攻擊手選擇需要可注入 RNG。");
   const evaluations = evaluateR1AttackCandidates(plan, players);
   const feasible = evaluations.filter((entry) => entry.feasible);
   if (feasible.length === 0) return Object.freeze({ selected: null, evaluations: Object.freeze(evaluations) });
-  const selected = plan.forcedCandidateJob
-    ? feasible.find((entry) => entry.job === plan.forcedCandidateJob) ?? null
-    : feasible[Math.min(feasible.length - 1, Math.floor(random() * feasible.length))];
+  let selected = plan.forcedCandidateJob
+    ? feasible.find((entry) => entry.job === plan.forcedCandidateJob) ?? null : null;
+  if (!plan.forcedCandidateJob) {
+    const roll = random();
+    if (tactic?.selectionMode === "QUICK") {
+      selected = feasible.find((entry) => entry.attackType === ATTACK_TYPES.MIDDLE_QUICK) ?? null;
+    } else if (tactic?.selectionMode === "POWER") {
+      selected = [...feasible].sort((a, b) => {
+        const aPlayer = players.find((entry) => entry.id === a.playerId);
+        const bPlayer = players.find((entry) => entry.id === b.playerId);
+        return (bPlayer?.attack ?? 0) - (aPlayer?.attack ?? 0);
+      })[0] ?? null;
+    }
+    selected ??= feasible[Math.min(feasible.length - 1, Math.floor(roll * feasible.length))];
+  }
   return Object.freeze({ selected: selected ? Object.freeze(selected) : null,
     evaluations: Object.freeze(evaluations) });
 }

@@ -483,6 +483,11 @@ tbody tr:hover {
   object-fit: cover;
 }
 
+.unified-player-avatar {
+  color: #17110d;
+  border-color: #242424;
+}
+
 .lineup-slot__name {
   min-height: 1.5em;
   margin: 0.6rem 0 0;
@@ -2096,4 +2101,138 @@ tbody tr:hover {
   #attack-position-editor .pass-target-zone-editor__header { flex-wrap: wrap; }
   #attack-position-editor .pass-target-zone-editor__fields { grid-template-columns: 1fr; }
   .attack-position-selectors { display: grid; grid-template-columns: 1fr; }
+}
+
+/* Formal Match：只呈現正式 Session Snapshot，不參與任何物理判定。 */
+.formal-match-view {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.formal-match-view[hidden] { display: none; }
+
+.formal-match-header { margin-bottom: 0; }
+
+.formal-match-scoreboard {
+  position: absolute;
+  top: max(0.5rem, env(safe-area-inset-top));
+  right: 0.5rem;
+  left: 0.5rem;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  align-items: stretch;
+  padding: 0.65rem;
+  border: 1px solid #718395;
+  border-radius: 0.55rem;
+  background: rgb(35 38 42 / 84%);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.formal-match-scoreboard > p {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.42rem;
+  min-width: 0;
+  margin: 0;
+  color: #ffffff;
+  white-space: nowrap;
+}
+.formal-match-scoreboard > p:first-child { justify-content: flex-start; }
+.formal-match-scoreboard > p:last-child { justify-content: flex-end; }
+.formal-match-scoreboard strong { color: #ffffff; font-size: 0.82rem; letter-spacing: 0.04em; }
+.formal-match-scoreboard em { color: var(--color-gold-bright); font-size: 1.65rem; font-style: normal; font-weight: 900; }
+
+.formal-match-viewport {
+  height: clamp(24rem, 60dvh, 38rem);
+  min-height: 24rem;
+  aspect-ratio: auto;
+  cursor: default;
+  touch-action: none;
+}
+
+.formal-match-world { height: 100%; will-change: left; }
+.formal-match-player { transition: none; }
+.formal-match-player::after { display: none; content: none; }
+.formal-match-player__impact { display: grid; place-items: center; transform-origin: center; }
+.formal-match-player__impact.is-impact-mild { animation: formal-impact-mild 260ms ease-out both; }
+.formal-match-player__impact.is-impact-noticeable { animation: formal-impact-noticeable 430ms ease-out both; }
+.formal-match-player__impact.is-impact-strong { animation: formal-impact-strong 820ms cubic-bezier(0.2, 0.7, 0.25, 1) both; }
+
+@keyframes formal-impact-mild {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  45% { transform: translateX(var(--impact-direction, -5px)) rotate(-5deg); }
+}
+@keyframes formal-impact-noticeable {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  48% { transform: translateX(var(--impact-direction, -12px)) rotate(-14deg); }
+}
+@keyframes formal-impact-strong {
+  0% { transform: translateX(0) rotate(0); }
+  55% { transform: translateX(var(--impact-direction, -22px)) rotate(-75deg); }
+  78% { transform: translateX(var(--impact-direction, -8px)) rotate(-360deg); }
+  100% { transform: translateX(0) rotate(-360deg); }
+}
+
+.formal-match-ball {
+  overflow: visible;
+  background: #ffffff;
+  transform: translate(-50%, -50%) rotate(var(--ball-flight-angle, 0deg));
+  transition: width var(--ball-shape-transition, 90ms) linear,
+    height var(--ball-shape-transition, 90ms) linear;
+  transform-origin: center;
+}
+.formal-match-ball.is-net-finished {
+  opacity: 0;
+  transition: opacity 180ms ease-out,
+    width var(--ball-shape-transition, 90ms) linear,
+    height var(--ball-shape-transition, 90ms) linear;
+}
+
+.formal-match-coach { display: grid; gap: 0.65rem; min-width: 0; }
+.formal-match-message,
+.formal-match-meta,
+.formal-match-result { margin: 0; }
+.formal-match-message { min-height: 1.5em; color: var(--color-gold-bright); font-weight: 700; }
+.formal-match-meta { color: var(--color-muted); font-size: 0.78rem; }
+.formal-match-primary-controls { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.formal-match-primary-controls button { flex: 1 1 8rem; min-width: 0; }
+.formal-match-panel { min-width: 0; padding: 0.65rem; border: 1px solid var(--color-border); background: #0a0a0a; }
+.formal-match-panel summary { color: var(--color-gold-bright); cursor: pointer; font-weight: 800; }
+.formal-match-panel__note { margin: 0.55rem 0; color: var(--color-muted); font-size: 0.74rem; }
+.formal-match-operation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; margin-top: 0.65rem; }
+.formal-match-operation-grid label { display: grid; gap: 0.25rem; min-width: 0; color: var(--color-muted); font-size: 0.72rem; }
+.formal-match-operation-grid select { min-width: 0; min-height: 2.65rem; }
+.formal-match-sub-player { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.formal-match-sub-player select { flex: 1 1 auto; }
+.formal-match-sub-avatar__image {
+  display: grid;
+  width: 2.5rem;
+  aspect-ratio: 1;
+  overflow: hidden;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #17110d;
+  border: 2px solid #242424;
+  border-radius: 50%;
+  font-weight: 800;
+}
+.formal-match-sub-avatar__image img { width: 100%; height: 100%; object-fit: cover; }
+.formal-match-operation-grid p { margin: 0; align-self: center; color: var(--color-muted); }
+.formal-match-tactics { display: flex; flex-wrap: wrap; gap: 0.45rem; color: var(--color-muted); font-size: 0.76rem; }
+.formal-match-tactic { flex: 1 1 8rem; }
+.formal-match-diagnostics { max-height: 12rem; margin: 0.65rem 0 0; padding: 0.65rem; overflow: auto; background: #000; color: #ddd; font: 0.7rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; scrollbar-gutter: stable; }
+.formal-match-result { padding: 0.8rem; border: 1px solid var(--color-gold); color: var(--color-gold-bright); font-weight: 800; line-height: 1.5; }
+
+@media (max-width: 30rem) {
+  .formal-match-scoreboard { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.25rem; padding: 0.45rem 0.5rem; }
+  .formal-match-scoreboard em { font-size: 1.35rem; }
+  .formal-match-scoreboard strong { font-size: 0.7rem; }
+  .formal-match-viewport { height: clamp(22rem, 56dvh, 31rem); min-height: 22rem; }
+  .formal-match-operation-grid { grid-template-columns: 1fr; }
+  .formal-match-primary-controls button { flex-basis: calc(50% - 0.45rem); }
 }

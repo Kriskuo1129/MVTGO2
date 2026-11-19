@@ -9,15 +9,15 @@ for (const ability of [1, 44, 45, 79, 80, 99]) for (const serveType of Object.va
   const weights = getServeSpeedWeights(ability, serveType);
   assert.ok(Math.abs(Object.values(weights).reduce((sum, value) => sum + value, 0) - 100) < 1e-8);
   assert.equal(ability < 45 ? weights.FAST : weights.FAST > 0, ability < 45 ? 0 : true);
-  assert.equal(serveType === SIMULATOR_SERVE_TYPES.STANDING || ability < 80
+  assert.equal(serveType !== SIMULATOR_SERVE_TYPES.JUMP || ability < 80
     ? weights.ULTRA_FAST : weights.ULTRA_FAST > 0,
-  serveType === SIMULATOR_SERVE_TYPES.STANDING || ability < 80 ? 0 : true);
+  serveType !== SIMULATOR_SERVE_TYPES.JUMP || ability < 80 ? 0 : true);
 }
 assert.equal(getServeSpeedWeights(99, SIMULATOR_SERVE_TYPES.STANDING).ULTRA_FAST, 0);
 assert.ok(Math.abs(getServeSpeedWeights(80, SIMULATOR_SERVE_TYPES.JUMP).ULTRA_FAST - 1) < 0.5);
 assert.ok(Math.abs(getServeSpeedWeights(99, SIMULATOR_SERVE_TYPES.JUMP).ULTRA_FAST - 30) < 5);
 assert.equal(normalizeServeType("一般"), "STANDING");
-assert.equal(normalizeServeType("跳飄"), "JUMP");
+assert.equal(normalizeServeType("跳飄"), "JUMP_FLOAT");
 assert.equal(normalizeServeType("跳發"), "JUMP");
 
 for (const team of ["HOME", "AWAY"]) {
@@ -87,15 +87,15 @@ function complete({ team = "HOME", seed = 7, fps = 60 } = {}) {
   return simulator.getSnapshot();
 }
 
-const deterministicA = complete({ team: "HOME", seed: 8 });
-const deterministicB = complete({ team: "HOME", seed: 8 });
+const deterministicA = complete({ team: "HOME", seed: 1 });
+const deterministicB = complete({ team: "HOME", seed: 1 });
 assert.deepEqual(deterministicA.rallyResult, deterministicB.rallyResult);
 assert.deepEqual(deterministicA.serveResolution, deterministicB.serveResolution);
 assert.ok(deterministicA.events.filter((event) => event.type === "ATTACK_STARTED").length >= 2,
   "正式發球成功後必須能銜接既有多拍攻防。");
-assert.equal(complete({ team: "HOME", seed: 6 }).rallyResult.reason, "SERVE_NET");
-assert.equal(complete({ team: "HOME", seed: 46 }).rallyResult.reason, "SERVE_OUT");
-assert.equal(complete({ team: "AWAY", seed: 7 }).rallyResult.reason, "SERVE_NET");
+assert.equal(complete({ team: "HOME", seed: 9 }).rallyResult.reason, "SERVE_NET");
+assert.equal(complete({ team: "HOME", seed: 42 }).rallyResult.reason, "SERVE_OUT");
+assert.equal(complete({ team: "AWAY", seed: 6 }).rallyResult.reason, "SERVE_NET");
 function observeServeNet(team, seed) {
   const simulator = new ContinuousRallySimulator({ seed, servingTeam: team });
   simulator.launch();
@@ -109,7 +109,7 @@ function observeServeNet(team, seed) {
   }
   return { locked, minimumFinishingHeight, ended: simulator.getSnapshot() };
 }
-for (const [team, seed] of [["HOME", 6], ["AWAY", 7]]) {
+for (const [team, seed] of [["HOME", 9], ["AWAY", 6]]) {
   const observed = observeServeNet(team, seed);
   assert.equal(observed.locked.status, "FINISHING", "SERVE_NET 規則鎖定後必須繼續播放收尾。");
   const lockedEvent = observed.ended.events.find((event) => event.type === "RALLY_RESULT_LOCKED");
@@ -121,7 +121,7 @@ for (const [team, seed] of [["HOME", 6], ["AWAY", 7]]) {
   assert.equal(observed.ended.rallyResult.reason, "SERVE_NET");
   assert.equal(observed.ended.rallyResult.scoringTeam, team === "HOME" ? "AWAY" : "HOME");
 }
-const fpsRuns = [30, 60, 144].map((fps) => complete({ team: "HOME", seed: 8, fps }));
+const fpsRuns = [30, 60, 144].map((fps) => complete({ team: "HOME", seed: 1, fps }));
 assert.deepEqual(fpsRuns.map((run) => run.rallyResult), [fpsRuns[0].rallyResult, fpsRuns[0].rallyResult, fpsRuns[0].rallyResult]);
 assert.deepEqual(fpsRuns.map((run) => run.events.map((event) => event.type)),
   [fpsRuns[0].events.map((event) => event.type), fpsRuns[0].events.map((event) => event.type), fpsRuns[0].events.map((event) => event.type)]);

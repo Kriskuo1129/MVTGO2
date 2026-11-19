@@ -1,4 +1,5 @@
 import { getAbilityTierClass, getPlayerMoodName } from "../display/player-display.js";
+import { createPlayerAvatarElement } from "../display/player-avatar.js";
 import {
   createLineup,
   createStartingLineup,
@@ -10,23 +11,6 @@ import {
   sortPlayersForLineupPosition,
   validateDefaultStartingLineup,
 } from "../lineup/starting-lineup.js";
-
-function createAvatar(player, className = "player-avatar") {
-  const avatar = document.createElement("span");
-  avatar.className = className;
-  if (player?.avatar) {
-    const image = document.createElement("img");
-    image.src = player.avatar;
-    image.alt = `${player.name}頭像`;
-    avatar.append(image);
-  } else if (player) {
-    avatar.textContent = player.name.slice(-2);
-    avatar.setAttribute("aria-label", `${player.name}預設頭像`);
-  } else {
-    avatar.textContent = "選擇";
-  }
-  return avatar;
-}
 
 function createAbilityItem(label, value) {
   const item = document.createElement("span");
@@ -83,7 +67,7 @@ export function createLineupUi({ matchInput, testMode = false, onConfirm }) {
       button.type = "button";
       button.dataset.position = lineupPosition;
       button.setAttribute("aria-label", `${lineupPosition}：${player ? player.name : "選擇球員"}`);
-      button.append(createAvatar(player, "lineup-slot__avatar"));
+      button.append(createPlayerAvatarElement(player, "lineup-slot__avatar"));
       slot.append(title, button);
 
       if (player) {
@@ -122,7 +106,7 @@ export function createLineupUi({ matchInput, testMode = false, onConfirm }) {
 
       const identity = document.createElement("span");
       identity.className = "player-option__identity";
-      identity.append(createAvatar(player, "player-avatar"));
+      identity.append(createPlayerAvatarElement(player, "player-avatar"));
       const identityText = document.createElement("span");
       const name = document.createElement("strong");
       name.textContent = player.name;

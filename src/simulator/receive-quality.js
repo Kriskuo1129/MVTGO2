@@ -67,6 +67,7 @@ export function calculateReceiveSuccess({
   idealRange,
   preparationTime,
   morale,
+  moraleAlreadyApplied = false,
   qualityConfig = RECEIVE_QUALITY_CONFIG,
   successConfig = RECEIVE_SUCCESS_CONFIG,
 }) {
@@ -75,7 +76,7 @@ export function calculateReceiveSuccess({
   const incomingDifficulty = qualityConfig.incomingDifficulty[normalizedSpeedLevel];
   const positionBonus = calculatePositionBonus(positionDistance, idealRange, qualityConfig);
   const preparationBonus = calculatePreparationBonus(preparationTime, qualityConfig);
-  const moraleBonus = calculateMoraleBonus(morale, qualityConfig);
+  const moraleBonus = moraleAlreadyApplied ? 0 : calculateMoraleBonus(morale, qualityConfig);
   const controlScore = ability - incomingDifficulty + positionBonus + preparationBonus + moraleBonus;
   return Object.freeze({
     probability: interpolateProbability(controlScore, successConfig.scoreAnchors),
@@ -169,6 +170,7 @@ export function resolveReceiveQuality({
   idealRange,
   preparationTime,
   morale,
+  moraleAlreadyApplied = false,
   random = Math.random,
   config = RECEIVE_QUALITY_CONFIG,
 }) {
@@ -178,7 +180,7 @@ export function resolveReceiveQuality({
   if (!Number.isFinite(incomingDifficulty)) throw new RangeError(`未知的來球品質：${incomingSpeedLevel}`);
   const positionBonus = calculatePositionBonus(positionDistance, idealRange, config);
   const preparationBonus = calculatePreparationBonus(preparationTime, config);
-  const moraleBonus = calculateMoraleBonus(morale, config);
+  const moraleBonus = moraleAlreadyApplied ? 0 : calculateMoraleBonus(morale, config);
   const randomPerformance = config.randomMinimum
     + readRandom(random) * (config.randomMaximum - config.randomMinimum);
   const score = ability - incomingDifficulty + positionBonus

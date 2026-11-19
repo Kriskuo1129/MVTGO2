@@ -69,3 +69,5 @@ export const ATTACK_CONTACT_PARAMETERS = Object.freeze({
   minimumOverlapDepth: 16,
   contactHeight: 180,
 });
+
+export const ATTACK_QUALITY_THRESHOLDS = Object.freeze({ perfect: 80, normal: 50 });

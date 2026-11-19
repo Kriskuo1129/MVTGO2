@@ -7,6 +7,7 @@ import {
   SERVE_ACTION_TIMING,
   SERVE_GEOMETRY_CONFIG,
   SERVE_PROFILES,
+  SERVE_QUALITY_MODIFIERS,
   SERVE_TARGET_WEIGHTS,
   SERVE_TYPES_CONFIG,
 } from "./config/serve-config.js";
@@ -37,6 +38,20 @@ export function normalizeServeType(value) {
   const normalized = LEGACY_SERVE_TYPE_MAP[value] ?? value;
   if (!Object.values(SIMULATOR_SERVE_TYPES).includes(normalized)) throw new RangeError(`不支援的發球方式：${value}`);
   return normalized;
+}
+
+export function isJumpServeType(value) {
+  const serveType = normalizeServeType(value);
+  return serveType === SIMULATOR_SERVE_TYPES.JUMP_FLOAT || serveType === SIMULATOR_SERVE_TYPES.JUMP;
+}
+
+export function getServeQualityWeights(ability, serveTypeInput) {
+  if (!Number.isInteger(ability) || ability < 1 || ability > 99) throw new RangeError("發球能力必須是 1～99。 ");
+  const config = SERVE_TYPE_CONFIG[normalizeServeType(serveTypeInput)];
+  const progress = (ability - 1) / 98;
+  return Object.freeze(Object.fromEntries(["PERFECT", "NORMAL", "BAD"].map((quality) =>
+    [quality, config.qualityAnchors.low[quality]
+      + (config.qualityAnchors.high[quality] - config.qualityAnchors.low[quality]) * progress])));
 }
 
 export function getServeSpeedWeights(ability, serveTypeInput) {
@@ -95,7 +110,7 @@ export function detectServeContact({ previousBall, currentBall, previousPlayer, 
   }
   if (best.distance > ballRadius + SERVE_GEOMETRY_CONFIG.contactDistancePadding) return Object.freeze({ contacted: false, reason: "OUTSIDE_CONTACT_GEOMETRY", distance: best.distance });
   const ballHeight = previousBall.height + (currentBall.height - previousBall.height) * best.t;
-  if (serveType === SIMULATOR_SERVE_TYPES.JUMP
+  if (isJumpServeType(serveType)
     && (best.playerScreenY >= previousPlayer.y - SERVE_GEOMETRY_CONFIG.jumpScreenClearance
       || ballHeight < config.contactHeight - SERVE_GEOMETRY_CONFIG.jumpHeightTolerance)) {
     return Object.freeze({ contacted: false, reason: "JUMP_CONTACT_TOO_LOW", distance: best.distance });
@@ -112,6 +127,9 @@ export function resolveServeLaunch({ team, server, random, manualTarget = null,
   const serveType = normalizeServeType(server.serveType);
   const config = SERVE_TYPE_CONFIG[serveType];
   const weights = getServeSpeedWeights(server.serveAbility, serveType);
+  const qualityWeights = getServeQualityWeights(server.serveAbility, serveType);
+  const quality = selectWeighted(qualityWeights, random);
+  const qualityModifier = SERVE_QUALITY_MODIFIERS[quality];
   const speedLevel = selectWeighted(weights, random);
   // 手動測試仍走既有完整區域取樣以維持 Seed 序列；正式發球才套用前／後場權重。
   const targetZone = manualTarget ? "MANUAL"
@@ -120,7 +138,8 @@ export function resolveServeLaunch({ team, server, random, manualTarget = null,
     ? court.leftLandingPolygon : getServeTargetZones(court)[targetZone], random);
   const sampled = team === "HOME" ? { x: mirrorX(leftTarget.x, court), y: leftTarget.y } : leftTarget;
   const controlSpread = (100 - server.serveAbility)
-    * SERVE_GEOMETRY_CONFIG.controlSpreadCoefficient / config.control;
+    * SERVE_GEOMETRY_CONFIG.controlSpreadCoefficient / config.control
+    * qualityModifier.controlSpread;
   const spreadTarget = { x: sampled.x + (random() * 2 - 1) * controlSpread,
     y: sampled.y + (random() * 2 - 1) * controlSpread };
   const target = manualTarget ? { x: manualTarget.x, y: manualTarget.y }
@@ -132,10 +151,11 @@ export function resolveServeLaunch({ team, server, random, manualTarget = null,
     height: config.contactHeight });
   const distance = Math.hypot(target.x - contact.x, target.y - contact.y);
   const duration = distance / getSpikeReferenceSpeed(speedLevel);
-  return Object.freeze({ team, serverId: server.id, serveType,
+  return Object.freeze({ team, serverId: server.id, serveType, quality, qualityWeights,
     ability: server.serveAbility, speedLevel, speedWeights: weights, targetZone, start: contact, contact,
     target: Object.freeze({ ...target, height: SERVE_GEOMETRY_CONFIG.targetHeight }), duration,
-    arcHeight: config.arcHeight + (random() * 2 - 1) * SERVE_GEOMETRY_CONFIG.arcVariance });
+    arcHeight: config.arcHeight + (random() * 2 - 1) * SERVE_GEOMETRY_CONFIG.arcVariance
+      * qualityModifier.arcVariance });
 }
 
 export function detectServeNetContact(ball, fromProgress, toProgress, radius,

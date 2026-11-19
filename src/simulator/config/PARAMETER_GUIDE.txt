@@ -85,11 +85,11 @@ NATURAL_BALL_PHYSICS
 -----------------
 
 SERVE_TYPES_CONFIG
-- STANDING、JUMP：正式 Continuous 發球方式 enum，不是平衡值。
+- STANDING、JUMP_FLOAT、JUMP：正式 Continuous 發球品質 profile；動作仍分為原地與跳躍兩類。
 
 LEGACY_SERVE_TYPES
-- 一般→STANDING、跳飄／跳發→JUMP。
-- 只供舊資料相容；不代表正式三種發球物理。
+- 一般→STANDING、跳飄→JUMP_FLOAT、跳發→JUMP。
+- 中文正式球員資料透過此表轉成三個獨立 profile。
 
 SERVE_ACTION_TIMING（秒）
 - prepare = 0.18
@@ -103,6 +103,13 @@ SERVE_PROFILES.STANDING
 - tossDuration = 0.72 秒。
 - tossArcHeight = 105 world px。
 - contactHeight = 132 world px。
+- qualityAnchors：能力低 PERFECT／NORMAL／BAD = 8／62／30；能力高 = 58／39／3。
+
+SERVE_PROFILES.JUMP_FLOAT
+- speedFactors：SLOW 0.9、NORMAL 1.3、FAST 0.9；不提供 ULTRA_FAST。
+- arcHeight = 255 world px、control = 0.95。
+- tossDuration = 0.96 秒、tossArcHeight = 205 world px、contactHeight = 190 world px。
+- qualityAnchors：能力低 5／55／40；能力高 55／40／5。
 
 SERVE_PROFILES.JUMP
 - speedFactors：SLOW 0.55、NORMAL 1、FAST 1.45。
@@ -111,6 +118,13 @@ SERVE_PROFILES.JUMP
 - tossDuration = 1.02 秒。
 - tossArcHeight = 235 world px。
 - contactHeight = 205 world px。
+- qualityAnchors：能力低 2／43／55；能力高 52／40／8。
+
+SERVE_QUALITY_MODIFIERS
+- PERFECT：controlSpread 0.65、arcVariance 0.6。
+- NORMAL：1、1。
+- BAD：1.55、1.35。
+- 注意：品質只調整出球控制與弧度，掛網／界內／出界仍由真實球路決定。
 
 SERVE_TARGET_WEIGHTS
 - BACK = 80%、FRONT = 20%。
@@ -150,6 +164,7 @@ RECEIVE_QUALITY_PARAMETERS
 - randomMinimum = -10、randomMaximum = +10 分。
 - perfectThreshold = 75、normalThreshold = 40 分。
 - 注意：正式攻擊速度名為 NORMAL；RECEIVE 內部仍以 MEDIUM 相容映射，尚未遷移 enum。
+- 注意：正式外部球員已由 player-performance.js 套用士氣，正式 RECEIVE 會略過此舊 moraleBonus，避免重複計算；legacy 測試仍保留原行為。
 
 RECEIVE_SUCCESS_PARAMETERS
 - 成功率錨點：(分數, 機率)
@@ -176,6 +191,12 @@ SET_TRAJECTORY_TUNING
 - successfulTouchAnimationDuration = 0.35 秒。
 - 影響：S 可達性搜尋、第二段球路及成功 SET 的動作保留時間。
 
+SET_QUALITY_PARAMETERS
+- 一傳品質修正：PERFECT +8、NORMAL 0、BAD -15。
+- Seeded RNG 發揮：-8～+8 分。
+- PERFECT 門檻 78、NORMAL 門檻 45。
+- 注意：不改變固定攻擊點，也不新增舉球直接失誤；只在真實 SET 接觸後計算。
+
 
 六、attack-config.js
 ------------------
@@ -184,6 +205,7 @@ ATTACK_SET_QUALITY_MODIFIERS
 - PERFECT：power +10、consistency +8。
 - NORMAL：0、0。
 - BAD：power -15、consistency -12。
+- power 修正會改變已解鎖級別間的球速權重；FAST／ULTRA_FAST 解鎖仍只看原始 attack，舉球不可越級解鎖。
 
 ATTACK_POWER_WEIGHT_ANCHORS
 - attack 1：SLOW 95、NORMAL 5、FAST 0。
@@ -233,6 +255,10 @@ ATTACK_CONTACT_PARAMETERS
 - contactHeight = 180 world px。
 - 注意：READY／ATTACK 座標不在此檔；仍由 r1-attack-plan.js 定義。
 
+ATTACK_QUALITY_PARAMETERS
+- PERFECT 門檻 = 80、NORMAL 門檻 = 50。
+- 以有效 attack 與有效 attackConsistency 平均分數分類，供 Snapshot／Event 顯示；實際球路仍使用既有威力、穩定與物理流程。
+
 
 七、block-config.js
 -----------------
@@ -250,10 +276,44 @@ BLOCK_PHYSICS_PARAMETERS
 - lateralRetention = 0.5。
 - reboundVerticalSpeed = 95 world px/s。
 - minimumReboundHorizontalSpeed = 180 world px/s。
+- abilityDirectThresholdAdjustment = 0.18；有效 block 越高，可在合法幾何接觸內形成攔死的距離門檻越寬。
+- minimumDirectThreshold = 0.45、maximumDirectThreshold = 0.98。
+- powerMultiplier = 0.8～1.2（block 1～99 線性映射）。
+- 品質門檻：PERFECT 78、NORMAL 48。
 - 注意：責任名單與攔網位置不在此檔；由 Rotation／Job 定義決定。
 
 
-八、rally-config.js
+八、ability-config.js
+-------------------
+
+ABILITY_PERFORMANCE_CONFIG
+- mismatchMultiplier = 0.8；原始 position 與場上 Job 不相容時五項能力一次性乘算。
+- moodModifiers：1=-4、2=-2、3=0、4=+2、5=+4。
+- moraleNeutral = 30、moraleModifierPerPoint = 0.05。
+- effective ability 範圍 1～99，最後統一 Math.round。
+- attackConsistency：effective attack ×1 + 0，不新增第六項養成能力。
+- 計算順序：原始能力 → 錯位 → mood／morale → tactic → clamp／round。
+
+POSITION_JOB_COMPATIBILITY
+- S↔S、OH↔OH1／OH2、MB↔MB1／MB2、OP↔OP。
+
+
+九、tactics-config.js
+-------------------
+
+TACTIC_CARDS
+- HEAVY_HITTER（球給大砲）：攻擊候選優先有效 attack 最高者。
+- QUICK_ATTACK（球給快攻）：優先 MIDDLE_QUICK。
+- RECEIVE_FOCUS（專注接發）：下一 Rally 有效 receive +8。
+- COACH_CONFIDENCE：隊伍士氣 +10。
+- CHEER_SQUAD：隊伍士氣 +30。
+
+TACTIC_RULES
+- cardsPerSet = 3、maximumUsesPerSet = 3、maximumCardsPerRally = 1。
+- 抽卡使用 Match 專用 RNG，不消耗 Rally Seed 序列。
+
+
+十、rally-config.js
 -----------------
 
 RALLY_FLOW_CONFIG

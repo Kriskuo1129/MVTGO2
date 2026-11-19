@@ -57,11 +57,13 @@ first.start();
 let snapshot = first.getSnapshot();
 assert.equal(snapshot.playerInputMode, "EXTERNAL");
 const externalS = snapshot.players.find((player) => player.id === "HOME-S");
-assert.equal(externalS.attack, 72, "Adapter 必須使用已驗證快照，不受呼叫端後續修改影響。");
-assert.equal(externalS.blockAbility, 71);
-assert.equal(externalS.setAbility, 70);
-assert.equal(externalS.receiveAbility, 69);
-assert.equal(externalS.serveAbility, 68);
+assert.equal(externalS.rawAbilities.attack, 72,
+  "Adapter 必須保留已驗證的原始能力快照，不受呼叫端後續修改影響。");
+assert.equal(externalS.attack, 54, "錯位與情緒修正必須由共用有效能力層套用一次。");
+assert.equal(externalS.blockAbility, 53);
+assert.equal(externalS.setAbility, 52);
+assert.equal(externalS.receiveAbility, 51);
+assert.equal(externalS.serveAbility, 50);
 assert.equal(externalS.position, "OH", "原始 position 與場上 Job 必須獨立。");
 assert.equal(externalS.job, "S");
 assert.equal(externalS.formalServeType, "一般");
@@ -112,7 +114,7 @@ const invalidCases = [
     return new FormalRallyAdapter({ teams });
   },
   () => {
-    const teams = makeTeams(); delete teams.HOME[0].simulationOverrides;
+    const teams = makeTeams(); teams.HOME[0].morale = 100;
     return new FormalRallyAdapter({ teams });
   },
 ];

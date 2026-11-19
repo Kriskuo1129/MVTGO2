@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ContinuousRallySimulator } from "../src/simulator/continuous-rally-simulator.js";
 
-function run({ fps = 120, seed = 26, target = { x: 1820, y: 450 } } = {}) {
+function run({ fps = 120, seed = 1, target = { x: 1820, y: 450 } } = {}) {
   const simulator = new ContinuousRallySimulator({ seed, serveMode: "LEGACY_MANUAL" });
   simulator.launch(target);
   let previousTime = 0;
@@ -91,7 +91,7 @@ for (let index = 1; index < touches.length; index += 1) {
 for (const event of first.events.filter((entry) => entry.type === "RECEIVE_ERROR")) {
   assert.ok(event.trajectory.duration > 0 && event.trajectory.arcHeight > 0);
 }
-for (const [seed, team, direction] of [[11, "HOME", -1], [1, "AWAY", 1]]) {
+for (const [seed, team, direction] of [[14, "HOME", -1], [1, "AWAY", 1]]) {
   const errorSnapshot = run({ seed }).snapshot;
   const errorEvent = errorSnapshot.events.find((event) => event.type === "RECEIVE_ERROR"
     && event.team === team);
@@ -104,19 +104,19 @@ for (const [seed, team, direction] of [[11, "HOME", -1], [1, "AWAY", 1]]) {
 }
 const seed2 = run({ seed: 2 }).snapshot;
 assert.equal(seed2.status, "ENDED", "真實跑位後 Seed 2 仍須安全完成，不要求保留舊版強制多拍結果。");
-const missedSet = run({ seed: 37 }).snapshot;
+const missedSet = run({ seed: 4 }).snapshot;
 assert.equal(missedSet.rallyResult.reason, "SET_MISSED");
 assert.equal(missedSet.secondTouchResult.success, false);
 assert.equal(missedSet.secondTouchResult.reason, "SETTER_UNREACHABLE");
 assert.equal(missedSet.setContactDiagnostic.prediction.reachable, false);
 assert.ok(missedSet.setContactDiagnostic.normalizedDistance > 1,
   "視覺圓形可能重疊，但超出 SET 正上方容差時必須合理拒絕。");
-const net = run({ seed: 3 }).snapshot;
+const net = run({ seed: 15 }).snapshot;
 assert.equal(net.rallyResult.reason, "ATTACK_NET");
 assert.equal(net.rallyResult.scoringTeam, "HOME");
-const landed = run({ seed: 2 }).snapshot;
+const landed = run({ seed: 3 }).snapshot;
 assert.equal(landed.rallyResult.reason, "BALL_LANDED");
-const outRun = run({ seed: 10 });
+const outRun = run({ seed: 11 });
 assert.equal(outRun.snapshot.rallyResult.reason, "BALL_OUT");
 assert.ok(outRun.observed.finishing.some((snapshot) => snapshot.finishing.bounceCount > 0));
 const illegal = new ContinuousRallySimulator({ seed: 7 });

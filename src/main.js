@@ -4,15 +4,49 @@ import { createTestPregameMatchInput } from "./testing/create-test-pregame-match
 import { setupServeResultTestControls } from "./testing/serve-result-override.js";
 import { createSinglePlayerSimulatorApp } from "./simulator/simulator-main.js";
 import { createTeamSimulatorApp } from "./simulator/team-simulator-main.js";
+import { createFormalMatchApp } from "./simulator/formal-match-main.js";
+import { createFormalLineupInput, applyFormalStartingLineup } from "./simulator/formal-lineup-adapter.js";
+import { createLineupUi } from "./match/lineup-ui.js";
 
 document.title = APP_CONFIG.title;
 
 const matchTestButton = document.querySelector("#match-test-button");
 const simulatorButton = document.querySelector("#simulator-button");
 const teamSimulatorButton = document.querySelector("#team-simulator-button");
+const formalMatchButton = document.querySelector("#formal-match-button");
 const homeView = document.querySelector("#home-view");
 const simulatorView = document.querySelector("#simulator-view");
 const teamSimulatorView = document.querySelector("#team-simulator-view");
+const formalMatchView = document.querySelector("#formal-match-view");
+const lineupView = document.querySelector("#lineup-view");
+let activeFormalLineupUi = null;
+
+const formalMatchApp = createFormalMatchApp({
+  root: formalMatchView,
+  onExit() {
+    homeView.hidden = false;
+    formalMatchButton.focus({ preventScroll: true });
+  },
+});
+
+formalMatchButton.addEventListener("click", () => {
+  homeView.hidden = true;
+  formalMatchApp.hide();
+  activeFormalLineupUi?.destroy();
+  const teams = formalMatchApp.getConfiguredTeams();
+  activeFormalLineupUi = createLineupUi({
+    matchInput: createFormalLineupInput(teams),
+    onConfirm(startingLineup) {
+      formalMatchApp.configureTeams(applyFormalStartingLineup(teams, startingLineup));
+      activeFormalLineupUi?.destroy();
+      activeFormalLineupUi = null;
+      lineupView.hidden = true;
+      formalMatchApp.show();
+    },
+  });
+  lineupView.hidden = false;
+  activeFormalLineupUi.start();
+});
 
 const simulatorApp = createSinglePlayerSimulatorApp({
   root: simulatorView,

@@ -13,4 +13,11 @@ export const BLOCK_PHYSICS_PARAMETERS = Object.freeze({
   lateralRetention: 0.5,
   reboundVerticalSpeed: 95,
   minimumReboundHorizontalSpeed: 180,
+  abilityDirectThresholdAdjustment: 0.18,
+  minimumDirectThreshold: 0.45,
+  maximumDirectThreshold: 0.98,
+  minimumPowerMultiplier: 0.8,
+  maximumPowerMultiplier: 1.2,
+  qualityPerfectScore: 78,
+  qualityNormalScore: 48,
 });

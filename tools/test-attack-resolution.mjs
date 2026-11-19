@@ -54,9 +54,9 @@ for (const scenario of [
   { attack: 1, setQuality: "PERFECT", forbidden: ["FAST", "ULTRA_FAST"] },
   { attack: 30, setQuality: "NORMAL", forbidden: ["FAST", "ULTRA_FAST"] },
   { attack: 44, setQuality: "PERFECT", forbidden: ["FAST", "ULTRA_FAST"] },
-  { attack: 45, setQuality: "BAD", forbidden: ["ULTRA_FAST"], required: "FAST" },
+  { attack: 45, setQuality: "BAD", forbidden: ["ULTRA_FAST"] },
   { attack: 79, setQuality: "PERFECT", forbidden: ["ULTRA_FAST"] },
-  { attack: 80, setQuality: "BAD", forbidden: [], required: "ULTRA_FAST" },
+  { attack: 80, setQuality: "BAD", forbidden: [] },
   { attack: 99, setQuality: "NORMAL", forbidden: [], required: "ULTRA_FAST" },
   { attack: 75, setQuality: "PERFECT", forbidden: ["ULTRA_FAST"] },
 ]) {
@@ -71,6 +71,10 @@ for (const scenario of [
   for (const level of scenario.forbidden) assert.equal(seen.has(level), false);
   if (scenario.required) assert.equal(seen.has(scenario.required), true);
 }
+assert.equal(resolveAttackOutput({ attack: 45, attackConsistency: 50,
+  setQuality: "BAD", seed: 1 }).highestUnlockedSpeed, "FAST");
+assert.equal(resolveAttackOutput({ attack: 80, attackConsistency: 50,
+  setQuality: "BAD", seed: 1 }).highestUnlockedSpeed, "ULTRA_FAST");
 
 function pointInPolygon(point, polygon) {
   let sign = 0;
@@ -125,8 +129,8 @@ assert.deepEqual(getAttackSpeedWeights(applySetQualityModifiers(70, 1, "NORMAL")
   getAttackSpeedWeights(applySetQualityModifiers(70, 99, "NORMAL").effectiveAttack));
 const attack79Normal = resolveAttackOutput({ attack: 79, attackConsistency: 50, setQuality: "NORMAL", seed: 7 });
 const attack79Perfect = resolveAttackOutput({ attack: 79, attackConsistency: 50, setQuality: "PERFECT", seed: 7 });
-assert.deepEqual(attack79Perfect.speedWeights, attack79Normal.speedWeights);
-assert.equal(attack79Perfect.speedLevel, attack79Normal.speedLevel);
+assert.ok(attack79Perfect.speedWeights.FAST > attack79Normal.speedWeights.FAST,
+  "PERFECT 舉球應提高已解鎖高速球的權重。 ");
 assert.equal(attack79Perfect.speedWeights.ULTRA_FAST, 0);
 
 console.log(JSON.stringify({ parameterSamplesPerScenario: 3000, targetUniformityMean: qMean, scenarios: report }, null, 2));

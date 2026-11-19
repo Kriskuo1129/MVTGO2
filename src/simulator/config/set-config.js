@@ -10,3 +10,11 @@ export const SET_TRAJECTORY_TUNING = Object.freeze({
   additionalArcHeightPerSecond: 40,
   successfulTouchAnimationDuration: 0.35,
 });
+
+export const SET_QUALITY_PARAMETERS = Object.freeze({
+  receiveQualityModifiers: Object.freeze({ PERFECT: 8, NORMAL: 0, BAD: -15 }),
+  randomMinimum: -8,
+  randomMaximum: 8,
+  perfectThreshold: 78,
+  normalThreshold: 45,
+});

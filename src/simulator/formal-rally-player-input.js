@@ -15,7 +15,8 @@ function assertInteger(value, minimum, maximum, fieldName) {
   }
 }
 
-function validatePlayer(entry, team, index, allIds) {
+export function validateFormalPlayerRecord(entry, { team = "TEAM", index = 0,
+  allIds = new Set(), requireJob = true } = {}) {
   const label = `${team}[${index}]`;
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
     throw new TypeError(`${label} 必須是球員物件。`);
@@ -26,7 +27,7 @@ function validatePlayer(entry, team, index, allIds) {
   allIds.add(playerId);
   const name = typeof entry.name === "string" ? entry.name.trim() : "";
   if (!name) throw new TypeError(`${label}.name 不可為空。`);
-  if (!FORMAL_RALLY_JOBS.includes(entry.job)) {
+  if (requireJob && !FORMAL_RALLY_JOBS.includes(entry.job)) {
     throw new RangeError(`${label}.job 必須是：${FORMAL_RALLY_JOBS.join("、")}。`);
   }
   if (!PLAYER_POSITIONS.includes(entry.position)) {
@@ -44,25 +45,26 @@ function validatePlayer(entry, team, index, allIds) {
   if (entry.avatar !== null && entry.avatar !== undefined && typeof entry.avatar !== "string") {
     throw new TypeError(`${label}.avatar 必須是字串或 null。`);
   }
-  const overrides = entry.simulationOverrides;
-  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
-    throw new TypeError(`${label}.simulationOverrides 為開發測試必要欄位，必須明示提供。`);
+  const overrides = entry.simulationOverrides ?? null;
+  if (overrides !== null && (typeof overrides !== "object" || Array.isArray(overrides))) {
+    throw new TypeError(`${label}.simulationOverrides 必須是物件。`);
   }
-  assertInteger(overrides.attackConsistency, 1, 99,
-    `${label}.simulationOverrides.attackConsistency`);
-  assertInteger(overrides.morale, 0, 99, `${label}.simulationOverrides.morale`);
-  if (!SIMULATION_SERVE_TYPES.includes(overrides.serveType)) {
+  if (overrides?.attackConsistency !== undefined) {
+    assertInteger(overrides.attackConsistency, 1, 99,
+      `${label}.simulationOverrides.attackConsistency`);
+  }
+  if (overrides?.morale !== undefined) assertInteger(overrides.morale, 0, 99,
+    `${label}.simulationOverrides.morale`);
+  if (overrides?.serveType !== undefined && !SIMULATION_SERVE_TYPES.includes(overrides.serveType)) {
     throw new RangeError(`${label}.simulationOverrides.serveType 必須是：${SIMULATION_SERVE_TYPES.join("、")}。`);
   }
+  const morale = entry.morale ?? overrides?.morale ?? 30;
+  assertInteger(morale, 0, 99, `${label}.morale`);
   return Object.freeze({
-    playerId, name, job: entry.job, position: entry.position,
+    playerId, name, ...(requireJob ? { job: entry.job } : {}), position: entry.position,
     abilities: Object.freeze(abilities), mood: entry.mood,
-    serveType: entry.serveType, avatar: entry.avatar ?? null,
-    simulationOverrides: Object.freeze({
-      attackConsistency: overrides.attackConsistency,
-      morale: overrides.morale,
-      serveType: overrides.serveType,
-    }),
+    morale, serveType: entry.serveType, avatar: entry.avatar ?? null,
+    simulationOverrides: overrides ? Object.freeze({ ...overrides }) : null,
   });
 }
 
@@ -77,7 +79,8 @@ export function validateFormalRallyTeams(input) {
     if (!Array.isArray(source[team]) || source[team].length !== FORMAL_RALLY_JOBS.length) {
       throw new RangeError(`${team} 必須提供六名場上球員。`);
     }
-    const players = source[team].map((entry, index) => validatePlayer(entry, team, index, ids));
+    const players = source[team].map((entry, index) => validateFormalPlayerRecord(entry,
+      { team, index, allIds: ids }));
     const jobs = players.map((entry) => entry.job);
     for (const job of FORMAL_RALLY_JOBS) {
       if (jobs.filter((candidate) => candidate === job).length !== 1) {

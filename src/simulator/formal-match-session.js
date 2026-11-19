@@ -1,14 +1,17 @@
 import { createSeededRandom } from "./attack-quality.js";
 import { createFormalRallyAdapter } from "./formal-rally-adapter.js";
-import { validateFormalRallyTeams } from "./formal-rally-player-input.js";
 import { nextRallyRotation } from "./rotation-config.js";
 import { FORMAL_MATCH_RULES } from "./config/rally-config.js";
+import { createFormalMatchRoster } from "./formal-match-roster.js";
+import { createRallyTacticEffect, drawTacticHand, resolveTacticCard } from "./formal-tactics.js";
+import { TACTIC_RULES } from "./config/tactics-config.js";
 
 export const FORMAL_MATCH_STATES = Object.freeze({
   NOT_STARTED: "NOT_STARTED",
   RALLY_RUNNING: "RALLY_RUNNING",
   RALLY_ENDED: "RALLY_ENDED",
   BETWEEN_SETS: "BETWEEN_SETS",
+  PAUSED: "PAUSED",
   MATCH_ENDED: "MATCH_ENDED",
   ABORTED: "ABORTED",
 });
@@ -37,7 +40,7 @@ export class FormalMatchSession {
     parameters, fixedStep, formationLibrary,
     maximumRallySimulationTime = FORMAL_MATCH_RULES.maximumRallySimulationTime,
     maximumMatchRallies = FORMAL_MATCH_RULES.maximumMatchRallies } = {}) {
-    this.playerInput = validateFormalRallyTeams(teams);
+    this.roster = createFormalMatchRoster(teams);
     this.matchSeed = validateSeed(seed);
     if (typeof rallyAdapterFactory !== "function") throw new TypeError("rallyAdapterFactory 必須是函式。");
     if (!(maximumRallySimulationTime > 0) || !Number.isFinite(maximumRallySimulationTime)) {
@@ -65,6 +68,13 @@ export class FormalMatchSession {
     this.setRallyNumber = 0;
     this.currentRallySeed = null;
     this.currentRally = null;
+    this.teamMorale = { HOME: 30, AWAY: 30 };
+    this.streak = { team: null, count: 0 };
+    this.tacticHands = { HOME: Object.freeze([]), AWAY: Object.freeze([]) };
+    this.tacticUses = { HOME: 0, AWAY: 0 };
+    this.pendingTactic = null;
+    this.currentRallyTactics = { HOME: null, AWAY: null };
+    this.pausedState = null;
     this.setResults = [];
     this.rallyResults = [];
     this.events = [];
@@ -72,6 +82,8 @@ export class FormalMatchSession {
     this.fault = null;
     this.usedRallySeeds = new Set();
     this.random = createSeededRandom(this.matchSeed);
+    this.tacticRandom = createSeededRandom((this.matchSeed ^ 0xa5a5f00d) >>> 0);
+    this.roster.resetSet();
     return this.getSnapshot();
   }
 
@@ -101,6 +113,11 @@ export class FormalMatchSession {
     this.setScores = { HOME: 0, AWAY: 0 };
     this.rotations = { HOME: "R1", AWAY: "R1" };
     this.setRallyNumber = 0;
+    this.roster.resetSet();
+    this.tacticHands = { HOME: drawTacticHand(this.tacticRandom),
+      AWAY: drawTacticHand(this.tacticRandom) };
+    this.tacticUses = { HOME: 0, AWAY: 0 };
+    this.pendingTactic = null;
     if (setNumber === 1) {
       this.firstSetServingTeam = this.drawServingTeam();
       this.servingTeam = this.firstSetServingTeam;
@@ -124,8 +141,13 @@ export class FormalMatchSession {
     this.rallyNumber += 1;
     this.setRallyNumber += 1;
     this.currentRallySeed = this.nextRallySeed();
-    const options = { teams: this.playerInput.teams, rotations: { ...this.rotations },
-      servingTeam: this.servingTeam, seed: this.currentRallySeed };
+    const activeTactic = this.pendingTactic;
+    this.currentRallyTactics = { HOME: activeTactic?.team === "HOME"
+      ? createRallyTacticEffect(activeTactic.cardId) : null,
+    AWAY: activeTactic?.team === "AWAY" ? createRallyTacticEffect(activeTactic.cardId) : null };
+    const options = { teams: this.roster.getActiveTeams({ morale: this.teamMorale }),
+      rotations: { ...this.rotations }, servingTeam: this.servingTeam,
+      seed: this.currentRallySeed, tactics: this.currentRallyTactics };
     for (const [key, value] of Object.entries(this.adapterOptions)) {
       if (value !== undefined) options[key] = value;
     }
@@ -135,6 +157,7 @@ export class FormalMatchSession {
       throw new TypeError("rallyAdapterFactory 必須回傳 Formal Rally Adapter 相容物件。");
     }
     this.currentRally.start();
+    this.pendingTactic = null;
     this.status = FORMAL_MATCH_STATES.RALLY_RUNNING;
     this.events.push(Object.freeze({ type: "RALLY_STARTED", setNumber: this.currentSetNumber,
       setRallyNumber: this.setRallyNumber, rallyNumber: this.rallyNumber,
@@ -149,7 +172,8 @@ export class FormalMatchSession {
     }
     if (this.status === FORMAL_MATCH_STATES.NOT_STARTED
       || this.status === FORMAL_MATCH_STATES.MATCH_ENDED
-      || this.status === FORMAL_MATCH_STATES.ABORTED) return this.getSnapshot();
+      || this.status === FORMAL_MATCH_STATES.ABORTED
+      || this.status === FORMAL_MATCH_STATES.PAUSED) return this.getSnapshot();
     if (this.status === FORMAL_MATCH_STATES.RALLY_ENDED) {
       this.startRally();
       return this.getSnapshot();
@@ -182,6 +206,7 @@ export class FormalMatchSession {
       this.rotations[result.scoringTeam] = nextRallyRotation(this.rotations[result.scoringTeam]);
     }
     this.servingTeam = result.scoringTeam;
+    this.updateMoraleStreak(result.scoringTeam);
     const record = Object.freeze({ setNumber: this.currentSetNumber,
       setRallyNumber: this.setRallyNumber, rallyNumber: this.rallyNumber,
       seed: this.currentRallySeed, servingTeam, scoringTeam: result.scoringTeam,
@@ -199,6 +224,91 @@ export class FormalMatchSession {
     if (setWinner) this.finishSet(setWinner, target);
     else this.status = FORMAL_MATCH_STATES.RALLY_ENDED;
     return true;
+  }
+
+  updateMoraleStreak(scoringTeam) {
+    if (this.streak.team === scoringTeam) this.streak.count += 1;
+    else this.streak = { team: scoringTeam, count: 1 };
+    const delta = this.streak.count >= 5 ? 3 : this.streak.count === 4 ? 2
+      : this.streak.count === 3 ? 1 : 0;
+    if (delta === 0) return;
+    const losingTeam = opposite(scoringTeam);
+    this.teamMorale[scoringTeam] = Math.min(99, this.teamMorale[scoringTeam] + delta);
+    this.teamMorale[losingTeam] = Math.max(0, this.teamMorale[losingTeam] - delta);
+    this.events.push(Object.freeze({ type: "MORALE_UPDATED", rallyNumber: this.rallyNumber,
+      streakTeam: scoringTeam, streakCount: this.streak.count, delta,
+      morale: freezeScores(this.teamMorale) }));
+  }
+
+  operationBoundaryState() {
+    return this.status === FORMAL_MATCH_STATES.PAUSED ? this.pausedState : this.status;
+  }
+
+  pause(team) {
+    if (!TEAMS.includes(team)) throw new RangeError("暫停隊伍必須為 HOME 或 AWAY。 ");
+    if (![FORMAL_MATCH_STATES.RALLY_ENDED, FORMAL_MATCH_STATES.BETWEEN_SETS]
+      .includes(this.status)) throw new Error("只能在 Rally 結束後暫停。 ");
+    this.pausedState = this.status;
+    this.status = FORMAL_MATCH_STATES.PAUSED;
+    this.events.push(Object.freeze({ type: "MATCH_PAUSED", team,
+      setNumber: this.currentSetNumber, rallyNumber: this.rallyNumber }));
+    return this.getSnapshot();
+  }
+
+  resume() {
+    if (this.status !== FORMAL_MATCH_STATES.PAUSED) throw new Error("比賽目前未暫停。 ");
+    this.status = this.pausedState;
+    this.pausedState = null;
+    this.events.push(Object.freeze({ type: "MATCH_RESUMED",
+      setNumber: this.currentSetNumber, rallyNumber: this.rallyNumber }));
+    return this.getSnapshot();
+  }
+
+  substitute({ team, job, playerInId }) {
+    if (this.operationBoundaryState() !== FORMAL_MATCH_STATES.RALLY_ENDED) {
+      throw new Error("只能在同一局的 Rally 結束後換人。 ");
+    }
+    const result = this.roster.substitute({ team, job, playerInId });
+    this.events.push(Object.freeze({ type: "SUBSTITUTION", setNumber: this.currentSetNumber,
+      rallyNumber: this.rallyNumber, ...result }));
+    return result;
+  }
+
+  activateTactic({ team, cardId }) {
+    if (!TEAMS.includes(team)) throw new RangeError("戰術隊伍必須為 HOME 或 AWAY。 ");
+    if (this.operationBoundaryState() !== FORMAL_MATCH_STATES.RALLY_ENDED) {
+      throw new Error("戰術卡只能在同一局的下一球開始前使用。 ");
+    }
+    if (this.pendingTactic) throw new Error("每個 Rally 最多使用一張戰術卡。 ");
+    if (this.tacticUses[team] >= TACTIC_RULES.maximumUsesPerSet) throw new Error("本局戰術卡使用次數已達上限。 ");
+    const hand = [...this.tacticHands[team]];
+    const index = hand.indexOf(cardId);
+    if (index < 0) throw new Error("戰術卡不在本局手牌中。 ");
+    const card = resolveTacticCard(cardId);
+    hand.splice(index, 1);
+    this.tacticHands[team] = Object.freeze(hand);
+    this.tacticUses[team] += 1;
+    if (card.kind === "MORALE") {
+      this.teamMorale[team] = Math.min(99, this.teamMorale[team] + card.moraleDelta);
+    }
+    this.pendingTactic = Object.freeze({ team, cardId });
+    this.events.push(Object.freeze({ type: "TACTIC_ACTIVATED", team, cardId,
+      name: card.name, setNumber: this.currentSetNumber, appliesToRally: this.rallyNumber + 1,
+      morale: this.teamMorale[team] }));
+    return card;
+  }
+
+  getRosterSnapshot() { return this.roster.getSnapshot(); }
+
+  getOperationAvailability() {
+    const operationState = this.operationBoundaryState();
+    const boundary = [FORMAL_MATCH_STATES.RALLY_ENDED, FORMAL_MATCH_STATES.BETWEEN_SETS]
+      .includes(operationState);
+    const rallyBoundary = operationState === FORMAL_MATCH_STATES.RALLY_ENDED;
+    return Object.freeze({ canPause: boundary && this.status !== FORMAL_MATCH_STATES.PAUSED,
+      canResume: this.status === FORMAL_MATCH_STATES.PAUSED,
+      canSubstitute: rallyBoundary && this.roster.substitutionCount.HOME < 6,
+      canActivateTactic: rallyBoundary && !this.pendingTactic });
   }
 
   finishSet(winner, targetPoints) {
@@ -244,6 +354,11 @@ export class FormalMatchSession {
       setRallyNumber: this.setRallyNumber, currentRallySeed: this.currentRallySeed,
       rally: this.getRallySnapshot(), rallyResult: this.getRallyResult(),
       rallyResults: this.getRallyResults(), setResults: this.getSetResults(), matchResult: this.matchResult,
+      morale: freezeScores(this.teamMorale), streak: Object.freeze({ ...this.streak }),
+      tactics: Object.freeze({ hands: Object.freeze({ ...this.tacticHands }),
+        uses: Object.freeze({ ...this.tacticUses }), pending: this.pendingTactic,
+        current: Object.freeze({ ...this.currentRallyTactics }) }),
+      roster: this.getRosterSnapshot(), operations: this.getOperationAvailability(),
       fault: this.fault, events: this.getEvents() });
   }
 }

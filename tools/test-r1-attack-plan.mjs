@@ -120,7 +120,7 @@ function run(seed, fps = 60) {
 }
 
 const completedByJob = new Map();
-for (const seed of [1, 2, 3, 4]) {
+for (const seed of [1, 2, 3, 4, 5]) {
   const { snapshot, preparingSnapshot } = run(seed);
   assert.ok(preparingSnapshot, `Seed ${seed} 必須建立攻擊計畫。`);
   const planPlayers = preparingSnapshot.players.filter((player) =>
@@ -159,18 +159,23 @@ for (const seed of [1, 2, 3, 4]) {
 const seed20261113 = run(20261113);
 const firstPlanTeam = seed20261113.preparingSnapshot.attackPlan.team;
 assert.equal(firstPlanTeam, "AWAY");
+const firstSelection = seed20261113.secondTouchSnapshot.events.find((event) =>
+  event.type === "ATTACK_SELECTED" && event.team === firstPlanTeam);
 for (const job of ["OH1", "OP"]) {
   const candidate = seed20261113.preparingSnapshot.attackPlan.candidates.find((entry) => entry.job === job);
   const atPlan = seed20261113.preparingSnapshot.players.find((entry) => entry.team === firstPlanTeam && entry.job === job);
   const atSet = seed20261113.secondTouchSnapshot.players.find((entry) => entry.team === firstPlanTeam && entry.job === job);
-  assert.deepEqual({ x: atSet.targetX, y: atSet.targetY }, candidate.readyPosition,
-    `Seed 20261113：${job} 的移動目標必須維持正式 READY。`);
-  assert.ok(Math.hypot(atSet.x - candidate.readyPosition.x, atSet.y - candidate.readyPosition.y)
-    < Math.hypot(atPlan.x - candidate.readyPosition.x, atPlan.y - candidate.readyPosition.y),
-  `Seed 20261113：${job} 必須以真實速度接近 READY，不強制瞬移到位。`);
+  const expectedTarget = firstSelection?.job === job ? candidate.attackPosition : candidate.readyPosition;
+  assert.deepEqual({ x: atSet.targetX, y: atSet.targetY }, expectedTarget,
+    `Seed 20261113：${job} 必須使用正式 Attack Plan 的目前階段目標。`);
+  if (firstSelection?.job !== job) {
+    assert.ok(Math.hypot(atSet.x - candidate.readyPosition.x, atSet.y - candidate.readyPosition.y)
+      < Math.hypot(atPlan.x - candidate.readyPosition.x, atPlan.y - candidate.readyPosition.y),
+    `Seed 20261113：未被選中的 ${job} 必須以真實速度接近 READY，不強制瞬移。`);
+  }
 }
 assert.deepEqual(new Set(completedByJob.keys()), new Set(ATTACK_JOBS),
-  "固定 Seed 1～4 必須涵蓋四種真實第三觸球。 ");
+  "固定 Seed 1～5 必須涵蓋四種真實第三觸球。 ");
 
 const deterministicA = run(2).snapshot.events.filter((event) => event.type === "ATTACK_SELECTED");
 const deterministicB = run(2).snapshot.events.filter((event) => event.type === "ATTACK_SELECTED");

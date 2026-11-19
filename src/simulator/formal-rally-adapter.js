@@ -3,11 +3,12 @@ import { validateFormalRallySetup, validateFormalRallyTeams } from "./formal-ral
 
 export class FormalRallyAdapter {
   constructor({ teams, rotations = { HOME: "R1", AWAY: "R1" }, servingTeam = "HOME", seed = 1,
-    parameters, fixedStep, formationLibrary } = {}) {
+    parameters, fixedStep, formationLibrary, tactics = { HOME: null, AWAY: null } } = {}) {
     this.playerInput = validateFormalRallyTeams(teams);
     this.setup = validateFormalRallySetup({ rotations, servingTeam, seed });
     const options = { teams: this.playerInput.teams, rotations: this.setup.rotations,
       servingTeam: this.setup.servingTeam, seed: this.setup.seed, serveMode: "FORMAL" };
+    options.tactics = Object.freeze({ HOME: tactics?.HOME ?? null, AWAY: tactics?.AWAY ?? null });
     if (parameters !== undefined) options.parameters = parameters;
     if (fixedStep !== undefined) options.fixedStep = fixedStep;
     if (formationLibrary !== undefined) options.formationLibrary = formationLibrary;
