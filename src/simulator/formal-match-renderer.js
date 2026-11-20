@@ -37,7 +37,18 @@ export function resolveBallSpinRate(speed) {
 
 const BALL_DIRECTION_EVENTS = Object.freeze(new Set([
   "SERVE_CONTACT", "RECEIVE_OUTPUT", "RECEIVE_ERROR", "SET_RESULT",
-  "ATTACK_STARTED", "BLOCK_RESULT", "FINISHING_BOUNCE",
+  "ATTACK_STARTED", "BLOCK_RESULT",
+  "RALLY_RESULT_LOCKED", "RALLY_ENDED",
+]));
+
+const BALL_SPIN_EVENTS = Object.freeze(new Set([
+  "SERVE_CONTACT", "RECEIVE_OUTPUT", "RECEIVE_ERROR", "SET_RESULT",
+  "ATTACK_STARTED", "BLOCK_RESULT", "RALLY_RESULT_LOCKED", "RALLY_ENDED",
+]));
+
+const GROUND_RESULT_REASONS = Object.freeze(new Set([
+  "BALL_LANDED", "BALL_OUT", "SERVE_OUT", "RECEIVE_ERROR_LANDED",
+  "SET_MISSED", "THIRD_TOUCH_MISSED",
 ]));
 
 export function resolveBallFlightSegmentKey(snapshot) {
@@ -47,28 +58,61 @@ export function resolveBallFlightSegmentKey(snapshot) {
 }
 
 export function isBallSpinPhase(snapshot) {
-  if (!["SERVE_FLIGHT", "ATTACK_FLIGHT"].includes(snapshot?.rallyPhase)
-    || snapshot?.rallyResult) return false;
-  const latestContact = [...(snapshot?.events ?? [])].reverse().find((event) => [
-    "SERVE_CONTACT", "ATTACK_STARTED", "RECEIVE_RESULT", "SET_RESULT",
-    "BLOCK_CONTACT", "BLOCK_RESULT", "FINISHING_BOUNCE", "RALLY_RESULT_LOCKED",
-  ].includes(event.type));
-  return latestContact?.type === "SERVE_CONTACT" || latestContact?.type === "ATTACK_STARTED";
+  return resolveBallSpinProfile(snapshot).enabled;
 }
 
-export function resolveBallSpinProfile(snapshot) {
-  const speedLevel = resolveDisplayedSpeed(snapshot);
-  if (!isBallSpinPhase(snapshot)) return Object.freeze({ enabled: false, direction: 0,
-    degreesPerSecond: 0, speedLevel, startedAt: null });
-  const launchEvent = [...(snapshot?.events ?? [])].reverse().find((event) =>
-    ["SERVE_CONTACT", "ATTACK_STARTED"].includes(event.type) && event.outgoingVelocity);
-  const horizontalVelocity = launchEvent?.outgoingVelocity?.x ?? snapshot?.ballVelocity?.x ?? 0;
+export function resolveBallSpinDirection(horizontalVelocity, previousDirection = 0) {
   const epsilon = FORMAL_MATCH_VISUALS.ballSpin.horizontalSpeedEpsilon;
-  const direction = Math.abs(horizontalVelocity) < epsilon ? 0 : Math.sign(horizontalVelocity);
-  const actualSpeed = resolveActualBallSpeed(snapshot);
-  return Object.freeze({ enabled: direction !== 0, direction,
-    degreesPerSecond: resolveBallSpinRate(actualSpeed), actualSpeed, speedLevel,
-    startedAt: Number.isFinite(launchEvent?.time) ? launchEvent.time : snapshot?.simulationTime ?? 0 });
+  return Math.abs(horizontalVelocity ?? 0) < epsilon
+    ? previousDirection : Math.sign(horizontalVelocity);
+}
+
+export function resolveReceiveBallSpinRate(quality) {
+  return FORMAL_MATCH_VISUALS.ballSpin.receiveQualityDegreesPerSecond[quality] ?? 0;
+}
+
+export function resolveGroundSpinRate(initialRate, elapsedSeconds) {
+  const duration = FORMAL_MATCH_VISUALS.ballSpin.groundDecayDurationSeconds;
+  if (!(initialRate > 0) || !(duration > 0)) return 0;
+  return initialRate * Math.max(0, 1 - Math.max(0, elapsedSeconds) / duration);
+}
+
+export function resolveBallSpinProfile(snapshot, previous = {}) {
+  const speedLevel = resolveDisplayedSpeed(snapshot);
+  const spinEvent = [...(snapshot?.events ?? [])].reverse()
+    .find((event) => BALL_SPIN_EVENTS.has(event.type));
+  const startedAt = Number.isFinite(spinEvent?.time) ? spinEvent.time
+    : snapshot?.simulationTime ?? 0;
+  const fallbackDirection = previous.direction ?? 0;
+  const eventVelocity = spinEvent?.outgoingVelocity ?? snapshot?.ballVelocity ?? {};
+  const direction = resolveBallSpinDirection(eventVelocity.x, fallbackDirection);
+  const base = { speedLevel, startedAt, eventType: spinEvent?.type ?? null, direction };
+  if (["SERVE_CONTACT", "ATTACK_STARTED"].includes(spinEvent?.type)) {
+    const actualSpeed = resolveActualBallSpeed(snapshot);
+    return Object.freeze({ ...base, mode: "SPEED", enabled: direction !== 0,
+      degreesPerSecond: resolveBallSpinRate(actualSpeed), actualSpeed });
+  }
+  if (spinEvent?.type === "RECEIVE_OUTPUT") {
+    const degreesPerSecond = resolveReceiveBallSpinRate(spinEvent.quality);
+    return Object.freeze({ ...base, mode: "RECEIVE", enabled: direction !== 0 && degreesPerSecond > 0,
+      degreesPerSecond, quality: spinEvent.quality });
+  }
+  if (spinEvent?.type === "BLOCK_RESULT") {
+    const degreesPerSecond = (previous.degreesPerSecond ?? 0)
+      * FORMAL_MATCH_VISUALS.ballSpin.blockRetention;
+    return Object.freeze({ ...base, mode: "BLOCK", enabled: direction !== 0 && degreesPerSecond > 0,
+      degreesPerSecond });
+  }
+  if (spinEvent?.type === "RALLY_RESULT_LOCKED"
+    && GROUND_RESULT_REASONS.has(spinEvent.reason)) {
+    const initialRate = previous.groundInitialRate ?? previous.degreesPerSecond ?? 0;
+    const elapsed = Math.max(0, (snapshot?.simulationTime ?? startedAt) - startedAt);
+    const degreesPerSecond = resolveGroundSpinRate(initialRate, elapsed);
+    return Object.freeze({ ...base, direction: fallbackDirection, mode: "GROUND_DECAY",
+      enabled: fallbackDirection !== 0 && degreesPerSecond > 0, degreesPerSecond, initialRate });
+  }
+  return Object.freeze({ ...base, direction: fallbackDirection, mode: "STOP",
+    enabled: false, degreesPerSecond: 0 });
 }
 
 export function advanceBallSpinAngle(angle, elapsedSeconds, direction, degreesPerSecond) {
@@ -76,8 +120,48 @@ export function advanceBallSpinAngle(angle, elapsedSeconds, direction, degreesPe
   return angle + elapsedSeconds * degreesPerSecond * direction;
 }
 
+export function advanceGroundSpinAngle(angle, fromTime, toTime, direction, initialRate, startedAt) {
+  if (!(toTime > fromTime) || direction === 0 || !(initialRate > 0)) return angle;
+  const duration = FORMAL_MATCH_VISUALS.ballSpin.groundDecayDurationSeconds;
+  const integralAt = (time) => {
+    const elapsed = Math.max(0, Math.min(duration, time - startedAt));
+    return initialRate * (elapsed - elapsed ** 2 / (2 * duration));
+  };
+  return angle + direction * (integralAt(toTime) - integralAt(fromTime));
+}
+
 export function isNetFinished(snapshot) {
-  return ["SERVE_NET", "ATTACK_NET"].includes(snapshot?.rallyResult?.reason);
+  return snapshot?.status === "ENDED"
+    && ["SERVE_NET", "ATTACK_NET"].includes(snapshot?.rallyResult?.reason);
+}
+
+export function updateBallTrailSamples(samples, snapshot) {
+  const config = FORMAL_MATCH_VISUALS.ballTrail;
+  const time = snapshot?.simulationTime;
+  const ball = snapshot?.ball;
+  if (!Number.isFinite(time) || !Number.isFinite(ball?.x)
+    || !Number.isFinite(ball?.y) || !Number.isFinite(ball?.height)) return samples;
+  const previous = samples.at(-1);
+  const base = previous && time + 1e-10 < previous.time ? [] : samples;
+  const last = base.at(-1);
+  const sample = Object.freeze({ time, x: ball.x, y: ball.y, height: ball.height });
+  let next = base;
+  if (!last || time > last.time + 1e-10) {
+    const distance = last ? Math.hypot(sample.x - last.x,
+      (sample.y - sample.height) - (last.y - last.height)) : Infinity;
+    if (distance >= config.minimumWorldDistance) next = [...base, sample];
+  }
+  return next.filter((entry) => entry.time >= time - config.durationSeconds - 1e-10);
+}
+
+export function resolvePlayerShadowVisual(jumpHeight = 0) {
+  const config = FORMAL_MATCH_VISUALS.playerShadow;
+  const ratio = Math.min(1, Math.max(0, jumpHeight) / config.maximumJumpHeight);
+  return Object.freeze({
+    scale: 1 - (1 - config.minimumScale) * ratio,
+    opacity: config.maximumOpacity
+      - (config.maximumOpacity - config.minimumOpacity) * ratio,
+  });
 }
 
 export class FormalMatchRenderer {
@@ -91,6 +175,15 @@ export class FormalMatchRenderer {
     this.ballArtwork.src = "./assets/balls/volleyball.svg";
     this.ballArtwork.alt = "";
     this.ballElement.replaceChildren(this.ballArtwork);
+    this.trailElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.trailElement.classList.add("formal-match-ball-trail");
+    this.trailGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    this.trailElement.append(this.trailGroup);
+    this.landingMarker = document.createElement("span");
+    this.landingMarker.className = "formal-match-landing-marker";
+    this.landingMarker.hidden = true;
+    this.worldElement.insertBefore(this.trailElement, this.ballElement);
+    this.worldElement.insertBefore(this.landingMarker, this.ballElement);
     this.playerElements = new Map();
     this.processedEvents = 0;
     this.rallyNumber = null;
@@ -99,6 +192,10 @@ export class FormalMatchRenderer {
     this.ballSpinDirection = 0;
     this.ballSpinRate = 0;
     this.ballSpinLastTime = null;
+    this.ballSpinMode = "STOP";
+    this.ballSpinGroundInitialRate = 0;
+    this.ballTrailSamples = [];
+    this.landingMarkerKey = null;
     this.lastSnapshot = null;
     this.resizeObserver = typeof ResizeObserver === "function"
       ? new ResizeObserver(() => this.lastSnapshot && this.render(this.lastSnapshot, this.rallyNumber)) : null;
@@ -113,6 +210,12 @@ export class FormalMatchRenderer {
     this.ballSpinDirection = 0;
     this.ballSpinRate = 0;
     this.ballSpinLastTime = null;
+    this.ballSpinMode = "STOP";
+    this.ballSpinGroundInitialRate = 0;
+    this.ballTrailSamples = [];
+    this.trailGroup.replaceChildren();
+    this.landingMarkerKey = null;
+    this.landingMarker.hidden = true;
     this.ballElement.classList.remove("is-net-finished");
   }
 
@@ -125,6 +228,8 @@ export class FormalMatchRenderer {
     wrapper.dataset.team = player.team;
     const impact = document.createElement("span");
     impact.className = "formal-match-player__impact";
+    const shadow = document.createElement("span");
+    shadow.className = "formal-match-player__shadow";
     const motion = document.createElement("span");
     motion.className = "simulator-player__motion";
     const avatar = document.createElement("span");
@@ -141,9 +246,9 @@ export class FormalMatchRenderer {
     avatar.append(fallback, image);
     motion.append(avatar);
     impact.append(motion);
-    wrapper.append(impact);
+    wrapper.append(shadow, impact);
     this.worldElement.append(wrapper);
-    elements = { wrapper, impact, motion, avatar, fallback, image };
+    elements = { wrapper, shadow, impact, motion, avatar, fallback, image };
     this.playerElements.set(player.id, elements);
     updatePlayerAvatarElement(elements, player);
     return elements;
@@ -197,6 +302,14 @@ export class FormalMatchRenderer {
       elements.avatar.style.width = `${avatarSize}px`;
       elements.avatar.style.height = `${avatarSize}px`;
       elements.avatar.style.fontSize = `${Math.max(9, avatarSize * 0.2)}px`;
+      const jumpHeight = Math.max(0, player.jumpHeight ?? 0);
+      const shadowConfig = FORMAL_MATCH_VISUALS.playerShadow;
+      const shadowVisual = resolvePlayerShadowVisual(jumpHeight);
+      elements.shadow.style.width = `${avatarSize * shadowConfig.widthScale}px`;
+      elements.shadow.style.height = `${avatarSize * shadowConfig.heightScale}px`;
+      elements.shadow.style.setProperty("--player-shadow-offset", `${avatarSize * 0.42}px`);
+      elements.shadow.style.setProperty("--player-shadow-scale", String(shadowVisual.scale));
+      elements.shadow.style.opacity = String(shadowVisual.opacity);
       updatePlayerAvatarElement(elements, player);
       elements.impact.style.setProperty("--impact-direction", player.team === "HOME" ? "-12px" : "12px");
       const isReceiving = player.action === "RECEIVE";
@@ -240,19 +353,34 @@ export class FormalMatchRenderer {
     this.ballElement.hidden = false;
     this.ballElement.style.left = `${snapshot.ball.x / world.width * 100}%`;
     this.ballElement.style.top = `${(snapshot.ball.y - snapshot.ball.height) / world.height * 100}%`;
+    this.ballTrailSamples = updateBallTrailSamples(this.ballTrailSamples, snapshot);
+    this.renderBallTrail(world);
+    this.renderLandingMarker(snapshot, ballSize);
     const segmentKey = resolveBallFlightSegmentKey(snapshot);
-    const spinProfile = resolveBallSpinProfile(snapshot);
+    const spinProfile = resolveBallSpinProfile(snapshot, {
+      direction: this.ballSpinDirection,
+      degreesPerSecond: this.ballSpinRate,
+      groundInitialRate: this.ballSpinGroundInitialRate,
+    });
     if (segmentKey !== this.ballFlightSegmentKey) {
       this.ballFlightSegmentKey = segmentKey;
       this.ballSpinDirection = spinProfile.direction;
       this.ballSpinRate = spinProfile.degreesPerSecond;
+      this.ballSpinMode = spinProfile.mode;
+      this.ballSpinGroundInitialRate = spinProfile.mode === "GROUND_DECAY"
+        ? spinProfile.initialRate : 0;
       this.ballSpinLastTime = spinProfile.startedAt ?? snapshot.simulationTime;
     }
-    this.ballSpinRate = spinProfile.degreesPerSecond;
+    if (spinProfile.mode === "SPEED" || spinProfile.mode === "GROUND_DECAY") {
+      this.ballSpinRate = spinProfile.degreesPerSecond;
+    }
     const currentTime = snapshot.simulationTime ?? this.ballSpinLastTime ?? 0;
     if (spinProfile.enabled && this.ballSpinLastTime !== null) {
-      this.ballSpinAngle = advanceBallSpinAngle(this.ballSpinAngle,
-        currentTime - this.ballSpinLastTime, this.ballSpinDirection, this.ballSpinRate);
+      this.ballSpinAngle = spinProfile.mode === "GROUND_DECAY"
+        ? advanceGroundSpinAngle(this.ballSpinAngle, this.ballSpinLastTime, currentTime,
+          this.ballSpinDirection, this.ballSpinGroundInitialRate, spinProfile.startedAt)
+        : advanceBallSpinAngle(this.ballSpinAngle,
+          currentTime - this.ballSpinLastTime, this.ballSpinDirection, this.ballSpinRate);
     }
     this.ballSpinLastTime = currentTime;
     this.ballElement.dataset.speed = spinProfile.speedLevel;
@@ -273,6 +401,48 @@ export class FormalMatchRenderer {
   clear() {
     for (const elements of this.playerElements.values()) elements.wrapper.hidden = true;
     this.ballElement.hidden = true;
+    this.landingMarker.hidden = true;
+    this.ballTrailSamples = [];
+    this.trailGroup.replaceChildren();
     this.lastSnapshot = null;
+  }
+
+  renderBallTrail(world) {
+    this.trailElement.setAttribute("viewBox", `0 0 ${world.width} ${world.height}`);
+    const config = FORMAL_MATCH_VISUALS.ballTrail;
+    const segments = [];
+    const count = Math.max(1, this.ballTrailSamples.length - 1);
+    for (let index = 1; index < this.ballTrailSamples.length; index += 1) {
+      const from = this.ballTrailSamples[index - 1];
+      const to = this.ballTrailSamples[index];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", String(from.x));
+      line.setAttribute("y1", String(from.y - from.height));
+      line.setAttribute("x2", String(to.x));
+      line.setAttribute("y2", String(to.y - to.height));
+      const progress = index / count;
+      line.style.opacity = String(config.minimumOpacity
+        + (config.maximumOpacity - config.minimumOpacity) * progress);
+      segments.push(line);
+    }
+    this.trailGroup.replaceChildren(...segments);
+  }
+
+  renderLandingMarker(snapshot, ballSize) {
+    const point = snapshot.actualLandingPoint;
+    if (!point) return;
+    const key = `${point.rallySeed ?? snapshot.seed}:${point.time ?? "legacy"}`;
+    this.landingMarker.hidden = false;
+    this.landingMarker.style.left = `${point.x / snapshot.world.width * 100}%`;
+    this.landingMarker.style.top = `${point.y / snapshot.world.height * 100}%`;
+    const size = ballSize * FORMAL_MATCH_VISUALS.landingMarker.ballSizeScale;
+    this.landingMarker.style.width = `${size}px`;
+    this.landingMarker.style.height = `${size}px`;
+    if (key !== this.landingMarkerKey) {
+      this.landingMarkerKey = key;
+      this.landingMarker.classList.remove("is-new");
+      void this.landingMarker.offsetWidth;
+      this.landingMarker.classList.add("is-new");
+    }
   }
 }

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { ContinuousRallySimulator } from "../src/simulator/continuous-rally-simulator.js";
 import { DEFAULT_CONTINUOUS_FORMATION,
   resolveContinuousFormationProfile, resolveContinuousRallyFormation } from "../src/simulator/continuous-rally-formation.js";
-import { createR1AttackPreparationPlan, createR1BlockPlan, createR1DefensePlan, createR1ReceivePlan,
+import { createR1AttackPreparationPlan, createR1AttackSelectedPlan, createR1BlockPlan,
+  createR1DefensePlan, createR1ReceivePlan,
   R1_DEFENSE_RECEIVE_JOBS, R1_RECEIVE_JOBS, R1_WORK_TYPES } from "../src/simulator/r1-job-coordination.js";
 import { getR1AttackConfigurations, R1_ATTACK_PHASES } from "../src/simulator/r1-attack-plan.js";
 
@@ -40,6 +41,16 @@ assert.equal(byJob(counterattackPlan, "OP").workType, R1_WORK_TYPES.PREPARE_LONG
 const alternatePlan = createR1AttackPreparationPlan("HOME", { firstTouchJob: "S" });
 assert.equal(byJob(alternatePlan, "OP").workType, R1_WORK_TYPES.ALTERNATE_SET);
 assert.equal(byJob(alternatePlan, "S").workType, R1_WORK_TYPES.HOLD);
+const selectedConfiguration = getR1AttackConfigurations("HOME").OH2;
+const selectedDefense = resolveContinuousFormationProfile(DEFAULT_CONTINUOUS_FORMATION, "DEFENSE").HOME;
+const selectedPlan = createR1AttackSelectedPlan("HOME", {
+  selected: selectedConfiguration, defensePositions: selectedDefense,
+});
+assert.deepEqual(byJob(selectedPlan, "OH2").target, selectedConfiguration.attackPosition);
+for (const job of ["S", "OH1", "MB1", "MB2", "OP"]) {
+  const expected = selectedDefense.find((entry) => entry.position === job);
+  assert.deepEqual(byJob(selectedPlan, job).target, { x: expected.x, y: expected.y });
+}
 
 for (const team of ["HOME", "AWAY"]) {
   const initialFormation = resolveContinuousRallyFormation(DEFAULT_CONTINUOUS_FORMATION, team);
@@ -184,8 +195,45 @@ while (!receiveSnapshot.events.some((event) => event.type === "SECOND_TOUCH") &&
 const attackWorkEvent = receiveSnapshot.events.find((event) =>
   event.type === "R1_WORK_PLAN_ASSIGNED" && event.phase === "ATTACK_PREPARE");
 assert.ok(attackWorkEvent, "一傳成功後必須一次產生攻擊工作安排。");
-const attackWorkPlan = receiveSnapshot.teamWorkPlans[attackWorkEvent.team];
-assert.equal(byJob(attackWorkPlan, "S").workType, R1_WORK_TYPES.SET);
-assert.equal(byJob(attackWorkPlan, "MB2").workType, R1_WORK_TYPES.HOLD);
+const selectedWorkPlan = receiveSnapshot.teamWorkPlans[attackWorkEvent.team];
+assert.equal(selectedWorkPlan.phase, "ATTACK_SELECTED");
+const selectedEvent = receiveSnapshot.events.find((event) => event.type === "ATTACK_SELECTED");
+const selectedAttack = receiveSnapshot.attackPlan.candidates.find((entry) => entry.job === selectedEvent.job);
+assert.deepEqual(byJob(selectedWorkPlan, selectedEvent.job).target, selectedAttack.attackPosition);
+const defaultDefenseProfiles = resolveContinuousFormationProfile(DEFAULT_CONTINUOUS_FORMATION, "DEFENSE");
+for (const assignment of selectedWorkPlan.assignments.filter((entry) => entry.job !== selectedEvent.job)) {
+  const expected = defaultDefenseProfiles[attackWorkEvent.team]
+    .find((entry) => entry.position === assignment.job);
+  assert.deepEqual(assignment.target, { x: expected.x, y: expected.y },
+    "正式選出攻擊手後，舉球員及非攻擊手必須改往 DEFENSE。 ");
+}
+
+function assertSetterReturnsToDefense(seed, expectedSetterJob) {
+  const simulator = new ContinuousRallySimulator({ seed, serveMode: "LEGACY_MANUAL" });
+  simulator.launch({ x: 1820, y: 450 });
+  let snapshot = simulator.getSnapshot(), selection = null, guard = 0;
+  while (!selection && guard++ < 10000 && snapshot.status !== "ENDED") {
+    snapshot = simulator.updateFrame(1 / 60);
+    selection = snapshot.events.find((event) => event.type === "ATTACK_SELECTED"
+      && event.setterJob === expectedSetterJob);
+  }
+  assert.ok(selection, `Seed ${seed} 必須產生 ${expectedSetterJob} 舉球案例。`);
+  assert.equal(snapshot.teamWorkPlans[selection.team].phase, "ATTACK_SELECTED");
+  const setter = snapshot.players.find((entry) => entry.id === selection.setterPlayerId);
+  const expected = resolveContinuousFormationProfile(DEFAULT_CONTINUOUS_FORMATION, "DEFENSE")
+    [selection.team].find((entry) => entry.position === expectedSetterJob);
+  assert.deepEqual({ x: setter.targetX, y: setter.targetY }, { x: expected.x, y: expected.y });
+  const start = { x: setter.x, y: setter.y };
+  let moved = false;
+  for (let step = 0; step < 240 && !moved; step += 1) {
+    snapshot = simulator.updateFrame(1 / 60);
+    const current = snapshot.players.find((entry) => entry.id === selection.setterPlayerId);
+    moved = Math.hypot(current.x - start.x, current.y - start.y) > 1e-7;
+  }
+  assert.equal(moved, true, `${expectedSetterJob} 完成舉球收尾後必須以原速度開始回防。`);
+}
+
+assertSetterReturnsToDefense(2, "S");
+assertSetterReturnsToDefense(5, "OP");
 
 console.log("PASS: R1 S serve; stable receive eligibility; mirrored defense work; simultaneous attack preparation; fixed-step movement without teleport or per-frame reassignment.");

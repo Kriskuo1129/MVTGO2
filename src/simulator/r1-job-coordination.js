@@ -175,3 +175,22 @@ export function createR1AttackPreparationPlan(team, {
       && !(alternateSetter && job === alternateSetterJob),
   }))), rotation });
 }
+
+export function createR1AttackSelectedPlan(team, {
+  selected,
+  defensePositions,
+  rotation = "R1",
+} = {}) {
+  if (!selected?.job || !selected?.attackPosition) {
+    throw new TypeError("鎖定攻擊後的工作計畫需要攻擊手 Job 與 ATTACK 座標。");
+  }
+  const defense = createR1FormationStandbyPlan(team, defensePositions, "DEFENSE",
+    "ATTACKER_SELECTED", rotation);
+  return Object.freeze({ ...freezePlan(team, "ATTACK_SELECTED", "ATTACKER_SELECTED",
+    defense.assignments.map((assignment) => assignment.job === selected.job ? {
+      ...assignment,
+      workType: selected.workType,
+      target: Object.freeze({ ...selected.attackPosition }),
+      moveEnabled: true,
+    } : assignment)), rotation });
+}

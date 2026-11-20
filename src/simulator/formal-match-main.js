@@ -8,6 +8,11 @@ import { createPlayerAvatarElement } from "../display/player-avatar.js";
 
 const JOBS = Object.freeze(["S", "OH1", "MB1", "OP", "OH2", "MB2"]);
 
+export function resolveFormalTeamNames(teams) {
+  return Object.freeze(Object.fromEntries(["HOME", "AWAY"].map((team) => [team,
+    teams?.[team]?.name ?? teams?.[team]?.teamName ?? team])));
+}
+
 function cloneTeams(teams) {
   return Object.fromEntries(["HOME", "AWAY"].map((team) => [team, {
     players: teams[team].players.map((player) => ({ ...player, abilities: { ...player.abilities } })),
@@ -32,6 +37,7 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
   seed = null, seedFactory } = {}) {
   if (!root || typeof onExit !== "function") throw new TypeError("正式比賽頁需要 root 與 onExit。 ");
   const renderer = new FormalMatchRenderer({ root });
+  const teamNames = resolveFormalTeamNames(teams);
   const controls = {
     start: root.querySelector("#formal-match-start"), next: root.querySelector("#formal-match-next"),
     auto: root.querySelector("#formal-match-auto"), restart: root.querySelector("#formal-match-restart"),
@@ -40,7 +46,7 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
     substitute: root.querySelector("#formal-match-substitute"), tactics: root.querySelector("#formal-match-tactics"),
     substituteAvatar: root.querySelector("#formal-match-sub-avatar"),
   };
-  const fields = Object.fromEntries(["set", "score-home", "score-away",
+  const fields = Object.fromEntries(["team-home", "team-away", "sets-score", "score-home", "score-away",
     "message", "morale", "sub-count", "diagnostics", "result"]
     .map((name) => [name, root.querySelector(`#formal-match-${name}`)]));
   let match = null;
@@ -107,7 +113,9 @@ export function createFormalMatchApp({ root, onExit, teams = createFormalMatchTe
   function renderMatch() {
     if (!match) return;
     const snapshot = match.getSnapshot();
-    fields.set.textContent = snapshot.currentSetNumber ? String(snapshot.currentSetNumber) : "—";
+    fields["team-home"].textContent = teamNames.HOME;
+    fields["team-away"].textContent = teamNames.AWAY;
+    fields["sets-score"].textContent = `${snapshot.setsWon.HOME}:${snapshot.setsWon.AWAY}`;
     fields["score-home"].textContent = String(snapshot.setScores.HOME);
     fields["score-away"].textContent = String(snapshot.setScores.AWAY);
     fields.message.textContent = `${statusLabel(snapshot.status)}｜${rallyMessage(snapshot)}`;

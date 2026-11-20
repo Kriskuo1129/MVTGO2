@@ -1,6 +1,7 @@
 export const BLOCK_PHYSICS_PARAMETERS = Object.freeze({
   jumpDuration: 0.62,
   takeoffToContact: 0.24,
+  takeoffDelayAfterAttacker: 0.1,
   maximumJumpHeight: 105,
   baseReachHeight: 145,
   reachTowardNet: 48,

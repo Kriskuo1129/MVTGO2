@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { ContinuousRallySimulator } from "../src/simulator/continuous-rally-simulator.js";
 import { createSeededRandom } from "../src/simulator/attack-quality.js";
 import { ATTACK_TYPES, DEFAULT_ATTACK_POSITIONS } from "../src/simulator/attack-positions.js";
+import { DEFAULT_CONTINUOUS_FORMATION_LIBRARY, getContinuousRotationFormation,
+  resolveContinuousFormationProfile } from "../src/simulator/continuous-rally-formation.js";
 import { createR1AttackPlan, getR1AttackConfigurations, R1_ATTACK_PHASES,
   selectR1AttackCandidate } from "../src/simulator/r1-attack-plan.js";
 
@@ -121,8 +123,9 @@ function run(seed, fps = 60) {
 
 const completedByJob = new Map();
 for (const seed of [1, 2, 3, 4, 5]) {
-  const { snapshot, preparingSnapshot } = run(seed);
+  const { snapshot, preparingSnapshot, secondTouchSnapshot } = run(seed);
   assert.ok(preparingSnapshot, `Seed ${seed} 必須建立攻擊計畫。`);
+  assert.ok(secondTouchSnapshot, `Seed ${seed} 必須完成第二觸球並鎖定攻擊手。`);
   const planPlayers = preparingSnapshot.players.filter((player) =>
     player.team === preparingSnapshot.attackPlan.team && ATTACK_JOBS.includes(player.job));
   assert.equal(planPlayers.filter((player) => player.currentWork?.workType?.startsWith("PREPARE_")).length, 4,
@@ -133,6 +136,23 @@ for (const seed of [1, 2, 3, 4, 5]) {
       `${player.job} 的工作目標必須直接使用正式 Attack Plan READY。`);
     assert.deepEqual({ x: player.targetX, y: player.targetY }, candidate.readyPosition,
       `${player.job} 的 Player Agent 目標必須與 Attack Plan READY 一致。`);
+  }
+  const selectionAtSet = secondTouchSnapshot.events.find((event) => event.type === "ATTACK_SELECTED");
+  const selectedCandidate = secondTouchSnapshot.attackPlan.candidates
+    .find((entry) => entry.job === selectionAtSet.job);
+  const defenseAtSet = resolveContinuousFormationProfile(
+    getContinuousRotationFormation(DEFAULT_CONTINUOUS_FORMATION_LIBRARY, "R1"), "DEFENSE")
+    [selectionAtSet.team];
+  for (const player of secondTouchSnapshot.players.filter((entry) => entry.team === selectionAtSet.team)) {
+    const expectedTarget = player.job === selectionAtSet.job ? selectedCandidate.attackPosition
+      : defenseAtSet.find((entry) => entry.position === player.job);
+    assert.deepEqual({ x: player.targetX, y: player.targetY },
+      { x: expectedTarget.x, y: expectedTarget.y },
+      `${selectionAtSet.attackType} 選定後 ${player.job} 必須取得攻擊或 DEFENSE 正確路線。`);
+    const before = preparingSnapshot.players.find((entry) => entry.id === player.id);
+    const elapsed = secondTouchSnapshot.simulationTime - preparingSnapshot.simulationTime;
+    assert.ok(Math.hypot(player.x - before.x, player.y - before.y) <= player.moveSpeed * elapsed + 1e-6,
+      `${player.job} 工作切換不得瞬移。`);
   }
   for (const selected of snapshot.events.filter((event) => event.type === "ATTACK_SELECTED")) {
     const expectedConfiguration = getR1AttackConfigurations(selected.team, selected.attackPhase)[selected.job];
@@ -165,13 +185,19 @@ for (const job of ["OH1", "OP"]) {
   const candidate = seed20261113.preparingSnapshot.attackPlan.candidates.find((entry) => entry.job === job);
   const atPlan = seed20261113.preparingSnapshot.players.find((entry) => entry.team === firstPlanTeam && entry.job === job);
   const atSet = seed20261113.secondTouchSnapshot.players.find((entry) => entry.team === firstPlanTeam && entry.job === job);
-  const expectedTarget = firstSelection?.job === job ? candidate.attackPosition : candidate.readyPosition;
+  const rotation = seed20261113.secondTouchSnapshot.rotations[firstPlanTeam];
+  const defense = resolveContinuousFormationProfile(
+    getContinuousRotationFormation(DEFAULT_CONTINUOUS_FORMATION_LIBRARY, rotation), "DEFENSE")[firstPlanTeam];
+  const defenseTarget = defense.find((entry) => entry.position === job);
+  const expectedTarget = firstSelection?.job === job ? candidate.attackPosition
+    : { x: defenseTarget.x, y: defenseTarget.y };
   assert.deepEqual({ x: atSet.targetX, y: atSet.targetY }, expectedTarget,
     `Seed 20261113：${job} 必須使用正式 Attack Plan 的目前階段目標。`);
   if (firstSelection?.job !== job) {
-    assert.ok(Math.hypot(atSet.x - candidate.readyPosition.x, atSet.y - candidate.readyPosition.y)
-      < Math.hypot(atPlan.x - candidate.readyPosition.x, atPlan.y - candidate.readyPosition.y),
-    `Seed 20261113：未被選中的 ${job} 必須以真實速度接近 READY，不強制瞬移。`);
+    const elapsed = seed20261113.secondTouchSnapshot.simulationTime
+      - seed20261113.preparingSnapshot.simulationTime;
+    assert.ok(Math.hypot(atSet.x - atPlan.x, atSet.y - atPlan.y) <= atSet.moveSpeed * elapsed + 1e-6,
+      `Seed 20261113：未被選中的 ${job} 不得因改派 DEFENSE 而瞬移。`);
   }
 }
 assert.deepEqual(new Set(completedByJob.keys()), new Set(ATTACK_JOBS),

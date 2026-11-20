@@ -38,16 +38,20 @@
           <button id="formal-match-back" class="secondary-button" type="button">返回首頁</button>
         </header>
 
-        <div id="formal-match-viewport" class="simulator-viewport formal-match-viewport" aria-label="正式比賽球場">
-          <div id="formal-match-world" class="team-simulator-world formal-match-world">
-            <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
-            <span id="formal-match-ball" class="simulator-ball formal-match-ball" hidden aria-label="排球"></span>
-          </div>
+        <div class="formal-match-stage">
           <section class="formal-match-scoreboard" aria-label="正式比賽比分">
-            <p><strong>HOME</strong> <em id="formal-match-score-home">0</em></p>
-            <p><strong>SET</strong> <em id="formal-match-set">—</em></p>
-            <p><strong>AWAY</strong> <em id="formal-match-score-away">0</em></p>
+            <strong id="formal-match-score-home" class="formal-match-scoreboard__score">0</strong>
+            <span id="formal-match-team-home" class="formal-match-scoreboard__team">HOME</span>
+            <strong id="formal-match-sets-score" class="formal-match-scoreboard__sets">0:0</strong>
+            <span id="formal-match-team-away" class="formal-match-scoreboard__team">AWAY</span>
+            <strong id="formal-match-score-away" class="formal-match-scoreboard__score">0</strong>
           </section>
+          <div id="formal-match-viewport" class="simulator-viewport formal-match-viewport" aria-label="正式比賽球場">
+            <div id="formal-match-world" class="team-simulator-world formal-match-world">
+              <img src="./assets/courts/court-01.png" alt="排球場" draggable="false" />
+              <span id="formal-match-ball" class="simulator-ball formal-match-ball" hidden aria-label="排球"></span>
+            </div>
+          </div>
         </div>
 
         <section class="formal-match-coach" aria-label="教練操作">

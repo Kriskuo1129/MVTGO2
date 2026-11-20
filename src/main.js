@@ -1,6 +1,7 @@
 import { APP_CONFIG } from "./config/app.config.js";
 import { createFormalMatchApp } from "./simulator/formal-match-main.js";
 import { createFormalLineupInput, applyFormalStartingLineup } from "./simulator/formal-lineup-adapter.js";
+import { createFormalMatchRosterSource } from "./simulator/formal-match-test-data.js";
 import { createLineupUi } from "./match/lineup-ui.js";
 
 document.title = APP_CONFIG.title;
@@ -10,6 +11,7 @@ const homeView = document.querySelector("#home-view");
 const formalMatchView = document.querySelector("#formal-match-view");
 const lineupView = document.querySelector("#lineup-view");
 let activeFormalLineupUi = null;
+const formalRosterSource = createFormalMatchRosterSource();
 
 const formalMatchApp = createFormalMatchApp({
   root: formalMatchView,
@@ -23,7 +25,9 @@ matchTestButton.addEventListener("click", () => {
   homeView.hidden = true;
   formalMatchApp.hide();
   activeFormalLineupUi?.destroy();
-  const teams = formalMatchApp.getConfiguredTeams();
+  const roster = formalRosterSource.next();
+  const teams = roster.teams;
+  console.info(`[FormalMatch] rosterSeed=${roster.seed}`);
   activeFormalLineupUi = createLineupUi({
     matchInput: createFormalLineupInput(teams),
     onConfirm(startingLineup) {
